@@ -1,0 +1,131 @@
+{
+  "project_name": "Kite",
+  "theme_strategy": {
+    "core_concept": "The Sky Journey",
+    "emotional_tone": "Uplifting, Playful, Airy, Encouraging",
+    "mode": "Light Mode Dominant (Sky), Dark Mode (Space/Night)",
+    "visual_style": "Soft gradients, floating elements, rounded geometry, organic motion"
+  },
+  "typography": {
+    "font_family": {
+      "heading": "Fredoka, sans-serif",
+      "body": "Quicksand, sans-serif",
+      "mono": "JetBrains Mono, monospace"
+    },
+    "scale": {
+      "h1": "text-4xl md:text-6xl font-semibold tracking-tight",
+      "h2": "text-3xl md:text-4xl font-semibold",
+      "h3": "text-2xl font-medium",
+      "body": "text-base md:text-lg leading-relaxed"
+    },
+    "google_fonts_url": "https://fonts.googleapis.com/css2?family=Fredoka:wght@300;400;600&family=Quicksand:wght@300;400;500;600;700&display=swap"
+  },
+  "colors": {
+    "light": {
+      "background": "hsl(200, 100%, 98%)",
+      "foreground": "hsl(215, 27.9%, 16.9%)",
+      "primary": "hsl(199, 89%, 48%)",
+      "primary_foreground": "hsl(210, 40%, 98%)",
+      "secondary": "hsl(210, 40%, 96.1%)",
+      "secondary_foreground": "hsl(222.2, 47.4%, 11.2%)",
+      "accent": "hsl(45, 93%, 47%)",
+      "accent_foreground": "hsl(210, 40%, 98%)",
+      "muted": "hsl(210, 40%, 96.1%)",
+      "muted_foreground": "hsl(215.4, 16.3%, 46.9%)",
+      "card": "hsl(0, 0%, 100%)",
+      "card_foreground": "hsl(222.2, 47.4%, 11.2%)",
+      "border": "hsl(214.3, 31.8%, 91.4%)",
+      "input": "hsl(214.3, 31.8%, 91.4%)",
+      "ring": "hsl(199, 89%, 48%)"
+    },
+    "dark": {
+      "background": "hsl(222.2, 84%, 4.9%)",
+      "foreground": "hsl(210, 40%, 98%)",
+      "primary": "hsl(199, 89%, 48%)",
+      "primary_foreground": "hsl(222.2, 47.4%, 11.2%)",
+      "secondary": "hsl(217.2, 32.6%, 17.5%)",
+      "secondary_foreground": "hsl(210, 40%, 98%)",
+      "accent": "hsl(45, 93%, 47%)",
+      "accent_foreground": "hsl(210, 40%, 98%)",
+      "muted": "hsl(217.2, 32.6%, 17.5%)",
+      "muted_foreground": "hsl(215, 20.2%, 65.1%)",
+      "card": "hsl(222.2, 84%, 4.9%)",
+      "card_foreground": "hsl(210, 40%, 98%)",
+      "border": "hsl(217.2, 32.6%, 17.5%)",
+      "input": "hsl(217.2, 32.6%, 17.5%)",
+      "ring": "hsl(212.7, 26.8%, 83.9%)"
+    }
+  },
+  "ui_components": {
+    "buttons": {
+      "primary": "rounded-full bg-sky-500 hover:bg-sky-600 text-white shadow-lg hover:shadow-sky-500/25 transition-all duration-300 hover:-translate-y-1",
+      "secondary": "rounded-full bg-white text-sky-600 border-2 border-sky-100 hover:border-sky-200 hover:bg-sky-50 shadow-sm transition-all duration-300",
+      "ghost": "rounded-full hover:bg-sky-50 text-sky-600 transition-colors"
+    },
+    "cards": {
+      "base": "bg-white/80 backdrop-blur-md border border-white/50 rounded-3xl shadow-xl shadow-sky-900/5",
+      "hover": "hover:shadow-2xl hover:shadow-sky-900/10 hover:-translate-y-1 transition-all duration-300"
+    },
+    "inputs": {
+      "base": "rounded-2xl border-sky-100 bg-white/50 focus:bg-white focus:ring-2 focus:ring-sky-400 focus:border-transparent transition-all"
+    }
+  },
+  "layout_strategies": {
+    "dashboard": "vertical_scroll_path",
+    "gameplay": "centered_floating_card",
+    "auth": "split_screen_sky_illustration"
+  },
+  "motion": {
+    "loading_kite": {
+      "animate": { "y": [0, -20, 0], "rotate": [-2, 2, -2] },
+      "transition": { "duration": 4, "repeat": "Infinity", "ease": "easeInOut" }
+    },
+    "cloud_drift": {
+      "animate": { "x": ["-10%", "110%"] },
+      "transition": { "duration": 60, "repeat": "Infinity", "ease": "linear" }
+    },
+    "page_transition": {
+      "initial": { "opacity": 0, "y": 20 },
+      "animate": { "opacity": 1, "y": 0 },
+      "exit": { "opacity": 0, "y": -20 },
+      "transition": { "duration": 0.4, "ease": "easeOut" }
+    }
+  },
+  "assets": {
+    "images": {
+      "hero_bg": "https://images.unsplash.com/photo-1759846866372-9c61f0d5be02?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1Nzd8MHwxfHNlYXJjaHwxfHxjb2xvcmZ1bCUyMGtpdGUlMjBmbHlpbmclMjBpbiUyMGJsdWUlMjBza3klMjBpbGx1c3RyYXRpb258ZW58MHx8fHwxNzczMjM0ODY1fDA&ixlib=rb-4.1.0&q=85",
+      "character_kite": "https://images.unsplash.com/photo-1737295315113-8c4c76dedf4e?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NjZ8MHwxfHNlYXJjaHwxfHxjdXRlJTIwYW5pbWFsJTIwa2l0ZSUyMGlsbHVzdHJhdGlvbiUyMHZlY3RvcnxlbnwwfHx8fDE3NzMyMzQ4NjZ8MA&ixlib=rb-4.1.0&q=85",
+      "cloud_texture": "https://images.unsplash.com/photo-1613132272712-011be2fe6677?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDQ2NDN8MHwxfHNlYXJjaHwxfHxmbHVmZnklMjB3aGl0ZSUyMGNsb3VkcyUyMGJsdWUlMjBza3klMjBiYWNrZ3JvdW5kfGVufDB8fHx8MTc3MzIzNDg2N3ww&ixlib=rb-4.1.0&q=85",
+      "logo_placeholder": "https://placehold.co/100x100/sky-500/white?text=Kite"
+    },
+    "icons_library": "lucide-react"
+  },
+  "universal_guidelines": [
+    "DO NOT use Inter or standard sans fonts. Use Fredoka for personality.",
+    "Use 'sky-500' as the primary brand color.",
+    "Implement the 'floating' feel using framer-motion on key elements (cards, kites).",
+    "Ensure 2-3x padding in containers for an 'airy' feel.",
+    "Use backdrop-blur heavily to simulate looking through clouds.",
+    "All interactive elements must have a data-testid attribute.",
+    "Use 'sonner' for notifications.",
+    "Components must use named exports.",
+    "Pages must use default exports."
+  ],
+  "instructions_to_main_agent": {
+    "setup": [
+      "Install 'framer-motion' for animations.",
+      "Install 'lucide-react' for icons.",
+      "Install 'sonner' for toasts.",
+      "Update 'index.css' with the provided CSS variables.",
+      "Add the Google Fonts link to the public index.html."
+    ],
+    "implementation_order": [
+      "Setup Theme & Global CSS",
+      "Create Animated Kite Loading Component",
+      "Build Auth Pages (Login/Signup)",
+      "Build Dashboard (Level Path)",
+      "Build Gameplay Interface",
+      "Build Shop & Leaderboard"
+    ]
+  }
+}
