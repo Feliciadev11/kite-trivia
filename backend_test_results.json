@@ -1,0 +1,349 @@
+{
+  "total_tests": 14,
+  "passed_tests": 13,
+  "failed_tests": 1,
+  "success_rate": 92.85714285714286,
+  "test_details": [
+    {
+      "test": "API Root",
+      "status": "PASS",
+      "message": "Status: 200",
+      "response_data": {
+        "message": "Kite Trivia API",
+        "version": "1.0"
+      }
+    },
+    {
+      "test": "Health Check",
+      "status": "PASS",
+      "message": "Status: 200",
+      "response_data": {
+        "status": "healthy"
+      }
+    },
+    {
+      "test": "User Registration",
+      "status": "PASS",
+      "message": "Status: 200",
+      "response_data": {
+        "user_id": "user_50429d0951fe",
+        "email": "testuser1773235418@example.com",
+        "name": "Test User",
+        "picture": null,
+        "coins": 0,
+        "current_character": "basic_kite",
+        "owned_characters": [
+          "basic_kite"
+        ],
+        "level": 1,
+        "xp": 0,
+        "total_correct": 0,
+        "total_questions": 0,
+        "weekly_score": 0,
+        "created_at": "2026-03-11T13:23:38.679204Z"
+      }
+    },
+    {
+      "test": "Get Current User",
+      "status": "PASS",
+      "message": "Status: 200",
+      "response_data": {
+        "user_id": "user_50429d0951fe",
+        "email": "testuser1773235418@example.com",
+        "name": "Test User",
+        "picture": null,
+        "coins": 0,
+        "current_character": "basic_kite",
+        "owned_characters": [
+          "basic_kite"
+        ],
+        "level": 1,
+        "xp": 0,
+        "total_correct": 0,
+        "total_questions": 0,
+        "weekly_score": 0,
+        "created_at": "2026-03-11T13:23:38.679204Z"
+      }
+    },
+    {
+      "test": "Get Questions",
+      "status": "PASS",
+      "message": "Status: 200",
+      "response_data": [
+        {
+          "question_id": "q1",
+          "question": "What is the capital of the United States?",
+          "options": [
+            "New York",
+            "Los Angeles",
+            "Washington D.C.",
+            "Chicago"
+          ],
+          "correct_answer": 2,
+          "category": "general",
+          "difficulty": 1,
+          "xp_reward": 10
+        },
+        {
+          "question_id": "q2",
+          "question": "How many continents are there?",
+          "options": [
+            "5",
+            "6",
+            "7",
+            "8"
+          ],
+          "correct_answer": 2,
+          "category": "general",
+          "difficulty": 1,
+          "xp_reward": 10
+        },
+        {
+          "question_id": "q3",
+          "question": "What color do you get when you mix red and blue?",
+          "options": [
+            "Green",
+            "Purple",
+            "Orange",
+            "Brown"
+          ],
+          "correct_answer": 1,
+          "category": "general",
+          "difficulty": 1,
+          "xp_reward": 10
+        },
+        {
+          "question_id": "q4",
+          "question": "How many days are in a week?",
+          "options": [
+            "5",
+            "6",
+            "7",
+            "8"
+          ],
+          "correct_answer": 2,
+          "category": "general",
+          "difficulty": 1,
+          "xp_reward": 10
+        },
+        {
+          "question_id": "q5",
+          "question": "What planet is known as the Red Planet?",
+          "options": [
+            "Venus",
+            "Mars",
+            "Jupiter",
+            "Saturn"
+          ],
+          "correct_answer": 1,
+          "category": "science",
+          "difficulty": 1,
+          "xp_reward": 10
+        }
+      ]
+    },
+    {
+      "test": "Submit Correct Answer",
+      "status": "PASS",
+      "message": "Status: 200",
+      "response_data": {
+        "correct": true,
+        "correct_answer": 2,
+        "xp_earned": 10,
+        "new_xp": 10,
+        "new_level": 1,
+        "level_up": false
+      }
+    },
+    {
+      "test": "Submit Wrong Answer",
+      "status": "PASS",
+      "message": "Status: 200",
+      "response_data": {
+        "correct": false,
+        "correct_answer": 2,
+        "xp_earned": 0,
+        "new_xp": 10,
+        "new_level": 1,
+        "level_up": false
+      }
+    },
+    {
+      "test": "Get Characters",
+      "status": "PASS",
+      "message": "Status: 200",
+      "response_data": [
+        {
+          "character_id": "basic_kite",
+          "name": "Basic Kite",
+          "description": "A classic diamond kite to start your journey!",
+          "price": 0.0,
+          "category": "cute_kite",
+          "image_url": "kite_basic",
+          "unlock_level": 0
+        },
+        {
+          "character_id": "rainbow_kite",
+          "name": "Rainbow Kite",
+          "description": "A colorful rainbow kite that sparkles in the sky!",
+          "price": 2.99,
+          "category": "cute_kite",
+          "image_url": "kite_rainbow",
+          "unlock_level": 2
+        },
+        {
+          "character_id": "star_kite",
+          "name": "Star Kite",
+          "description": "A star-shaped kite that glows at night!",
+          "price": 4.99,
+          "category": "cute_kite",
+          "image_url": "kite_star",
+          "unlock_level": 3
+        },
+        {
+          "character_id": "heart_kite",
+          "name": "Heart Kite",
+          "description": "A lovely heart-shaped kite full of love!",
+          "price": 3.99,
+          "category": "cute_kite",
+          "image_url": "kite_heart",
+          "unlock_level": 2
+        },
+        {
+          "character_id": "cloud_kite",
+          "name": "Cloud Kite",
+          "description": "A fluffy cloud kite that floats among the clouds!",
+          "price": 5.99,
+          "category": "cute_kite",
+          "image_url": "kite_cloud",
+          "unlock_level": 4
+        },
+        {
+          "character_id": "butterfly_kite",
+          "name": "Butterfly Kite",
+          "description": "A beautiful butterfly kite with colorful wings!",
+          "price": 3.99,
+          "category": "animal_kite",
+          "image_url": "kite_butterfly",
+          "unlock_level": 2
+        },
+        {
+          "character_id": "dragon_kite",
+          "name": "Dragon Kite",
+          "description": "A fierce dragon kite that breathes wind!",
+          "price": 6.99,
+          "category": "animal_kite",
+          "image_url": "kite_dragon",
+          "unlock_level": 5
+        },
+        {
+          "character_id": "owl_kite",
+          "name": "Owl Kite",
+          "description": "A wise owl kite with big eyes!",
+          "price": 4.99,
+          "category": "animal_kite",
+          "image_url": "kite_owl",
+          "unlock_level": 3
+        },
+        {
+          "character_id": "fish_kite",
+          "name": "Fish Kite",
+          "description": "A swimming fish kite that rides the wind currents!",
+          "price": 3.49,
+          "category": "animal_kite",
+          "image_url": "kite_fish",
+          "unlock_level": 2
+        },
+        {
+          "character_id": "eagle_kite",
+          "name": "Eagle Kite",
+          "description": "A majestic eagle kite soaring high!",
+          "price": 7.99,
+          "category": "animal_kite",
+          "image_url": "kite_eagle",
+          "unlock_level": 6
+        }
+      ]
+    },
+    {
+      "test": "Equip Character",
+      "status": "PASS",
+      "message": "Status: 200",
+      "response_data": {
+        "message": "Character equipped",
+        "character_id": "basic_kite"
+      }
+    },
+    {
+      "test": "Purchase Character",
+      "status": "FAIL",
+      "message": "Expected 200, got 403. Response: {'detail': 'Requires level 2'}",
+      "response_data": null
+    },
+    {
+      "test": "Get Leaderboard",
+      "status": "PASS",
+      "message": "Status: 200",
+      "response_data": [
+        {
+          "user_id": "user_50429d0951fe",
+          "name": "Test User",
+          "picture": null,
+          "weekly_score": 1,
+          "level": 1,
+          "current_character": "basic_kite"
+        },
+        {
+          "user_id": "user_cd7bf8e655cf",
+          "name": "Test User",
+          "picture": null,
+          "weekly_score": 0,
+          "level": 1,
+          "current_character": "basic_kite"
+        }
+      ]
+    },
+    {
+      "test": "Get My Rank",
+      "status": "PASS",
+      "message": "Status: 200",
+      "response_data": {
+        "rank": 1,
+        "weekly_score": 1
+      }
+    },
+    {
+      "test": "Get Profile",
+      "status": "PASS",
+      "message": "Status: 200",
+      "response_data": {
+        "user_id": "user_50429d0951fe",
+        "email": "testuser1773235418@example.com",
+        "name": "Test User",
+        "picture": null,
+        "coins": 0,
+        "current_character": "basic_kite",
+        "owned_characters": [
+          "basic_kite"
+        ],
+        "level": 1,
+        "xp": 10,
+        "total_correct": 1,
+        "total_questions": 2,
+        "weekly_score": 1,
+        "created_at": "2026-03-11T13:23:38.679204+00:00",
+        "accuracy": 50.0,
+        "xp_for_next_level": 100,
+        "xp_progress": 10.0
+      }
+    },
+    {
+      "test": "Logout",
+      "status": "PASS",
+      "message": "Status: 200",
+      "response_data": {
+        "message": "Logged out"
+      }
+    }
+  ]
+}

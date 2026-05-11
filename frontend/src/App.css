@@ -1,34 +1,86 @@
-.App-logo {
-    height: 40vmin;
-    pointer-events: none;
+/* App specific styles */
+.App {
+  min-height: 100vh;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-    .App-logo {
-        animation: App-logo-spin infinite 20s linear;
-    }
+/* Question card animations */
+.question-enter {
+  opacity: 0;
+  transform: translateX(50px);
 }
 
-.App-header {
-    background-color: #0f0f10;
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    font-size: calc(10px + 2vmin);
-    color: white;
+.question-enter-active {
+  opacity: 1;
+  transform: translateX(0);
+  transition: all 0.3s ease-out;
 }
 
-.App-link {
-    color: #61dafb;
+.question-exit {
+  opacity: 1;
+  transform: translateX(0);
 }
 
-@keyframes App-logo-spin {
-    from {
-        transform: rotate(0deg);
-    }
-    to {
-        transform: rotate(360deg);
-    }
+.question-exit-active {
+  opacity: 0;
+  transform: translateX(-50px);
+  transition: all 0.3s ease-in;
+}
+
+/* Option button styles */
+.option-button {
+  @apply w-full p-4 text-left rounded-2xl border-2 transition-all duration-300;
+}
+
+.option-button:hover:not(:disabled) {
+  @apply border-sky-300 bg-sky-50 -translate-y-1;
+}
+
+.option-correct {
+  @apply border-green-500 bg-green-50 text-green-700;
+}
+
+.option-incorrect {
+  @apply border-red-500 bg-red-50 text-red-700;
+}
+
+.option-selected {
+  @apply border-sky-500 bg-sky-50;
+}
+
+/* Character card styles */
+.character-card {
+  @apply relative overflow-hidden rounded-3xl transition-all duration-300;
+}
+
+.character-card:hover {
+  @apply -translate-y-2;
+}
+
+.character-owned {
+  @apply ring-2 ring-green-500;
+}
+
+.character-locked {
+  @apply opacity-60;
+}
+
+/* Leaderboard styles */
+.leaderboard-row {
+  @apply flex items-center gap-4 p-4 rounded-2xl transition-all duration-200;
+}
+
+.leaderboard-row:hover {
+  @apply bg-sky-50;
+}
+
+.rank-1 {
+  @apply bg-gradient-to-r from-yellow-100 to-yellow-50;
+}
+
+.rank-2 {
+  @apply bg-gradient-to-r from-gray-100 to-gray-50;
+}
+
+.rank-3 {
+  @apply bg-gradient-to-r from-orange-100 to-orange-50;
 }
