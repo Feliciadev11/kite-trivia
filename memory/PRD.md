@@ -99,3 +99,46 @@ Build a trivia app called Kite with:
 1. Add admin endpoint for purchase confirmation
 2. Add more question categories
 3. Consider push notifications for daily rewards
+
+---
+
+## v1.2 - Atmospheric Enhancement (Current)
+
+### New Features Implemented
+
+#### Audio & Atmosphere
+- **Ambient Audio System**: Soft background music with volume control
+- **Atmospheric Backgrounds**: Dynamic backgrounds with floating clouds, particles, and wind lines
+- **Sky Theme System**: 12 unlockable sky themes that change the app's atmosphere
+  - Dawn (free), Clear Day, Sunset Glow, Twilight, Cloudy Dreams, Golden Hour
+  - Starry Night, Moonlit, Gentle Rain, Aurora Borealis, Celestial Night, Cherry Blossom Sky
+
+#### Expanded Marketplace (43 items total)
+- **20 Kites**: From Basic to Legendary (Phoenix, Aurora, Neon Cyber)
+- **11 Companions**: Creatures that follow your kite (Fox, Owl, Dragon, Spirit Deer)
+- **12 Sky Themes**: Atmospheric backgrounds
+
+#### Rarity System
+- Common, Rare, Epic, Legendary tiers
+- Legendary items have shimmer animation effects
+- Level-gated unlocks
+
+#### Expanded Questions (220 total)
+- 15 categories: Animals, Space, Geography, Music, Movies, Nostalgia, Brain Teasers, Internet Culture, Would You Rather, World Trivia, Weird Facts, General, Science, History, Pop Culture
+- Questions rotate intelligently with random selection
+
+#### User Experience
+- Calm, relaxing aesthetic maintained throughout
+- Smooth transitions and gentle animations
+- Discovery-based progression (levels unlock new skies, companions, kites)
+
+### Database Stats
+- Questions: 220 across 15 categories
+- Characters: 43 (20 kites, 11 companions, 12 sky themes)
+- User fields: current_companion, current_sky_theme, owned_companions, owned_sky_themes
+
+### Remaining for Beta
+- [ ] Admin panel for purchase verification
+- [ ] Push notifications for daily rewards
+- [ ] Sound effects (optional toggle)
+- [ ] More questions (target: 500+)

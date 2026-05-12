@@ -156,7 +156,7 @@ export default function ShopPage() {
             </TabsTrigger>
           </TabsList>
 
-          <AnimatePresence mode="wait">
+          <AnimatePresence>
             {/* Kites Tab */}
             <TabsContent value="kites" className="mt-0">
               <motion.div
