@@ -5,12 +5,14 @@ import axios from "axios";
 import { Button } from "../components/ui/button";
 import { Progress } from "../components/ui/progress";
 import { useAuth, API, LoadingKite } from "../App";
+import { useAudio } from "../contexts/AudioContext";
 import { toast } from "sonner";
 import { ArrowLeft, ArrowRight, CheckCircle, XCircle, Sparkles, Home } from "lucide-react";
 
 export default function PlayPage() {
   const navigate = useNavigate();
   const { user, refreshUser } = useAuth();
+  const { playSoundEffect } = useAudio();
   const [questions, setQuestions] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState(null);
@@ -60,7 +62,11 @@ export default function PlayPage() {
         total: prev.total + 1
       }));
 
+      // Gentle audio feedback
+      playSoundEffect(response.data.correct ? 'correct' : 'incorrect');
+
       if (response.data.level_up) {
+        playSoundEffect('reward');
         toast.success(`Level Up! You're now level ${response.data.new_level}!`, {
           icon: <Sparkles className="text-yellow-500" />
         });
@@ -217,11 +223,11 @@ export default function PlayPage() {
                 
                 if (selectedAnswer !== null) {
                   if (index === result?.correct_answer) {
-                    optionClass = "border-green-500 bg-green-50 text-green-700";
+                    optionClass = "border-emerald-300 bg-emerald-50/80 text-emerald-700 shadow-[0_0_24px_rgba(110,231,183,0.45)]";
                   } else if (index === selectedAnswer && !result?.correct) {
-                    optionClass = "border-red-500 bg-red-50 text-red-700";
+                    optionClass = "border-amber-300 bg-amber-50/80 text-amber-700";
                   } else {
-                    optionClass = "border-gray-200 bg-gray-50 text-gray-500 opacity-60";
+                    optionClass = "border-slate-200 bg-white/40 text-slate-400 opacity-70";
                   }
                 }
 
@@ -230,38 +236,38 @@ export default function PlayPage() {
                     key={index}
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: index * 0.1 }}
-                    whileHover={selectedAnswer === null ? { scale: 1.02, y: -2 } : {}}
-                    whileTap={selectedAnswer === null ? { scale: 0.98 } : {}}
+                    transition={{ delay: index * 0.08, duration: 0.5, ease: "easeOut" }}
+                    whileHover={selectedAnswer === null ? { scale: 1.015, y: -2 } : {}}
+                    whileTap={selectedAnswer === null ? { scale: 0.985 } : {}}
                     onClick={() => handleAnswer(index)}
                     disabled={selectedAnswer !== null}
-                    className={`w-full p-4 text-left rounded-2xl border-2 transition-all duration-300 flex items-center gap-3 ${optionClass}`}
+                    className={`w-full p-4 text-left rounded-2xl border-2 transition-all duration-500 flex items-center gap-3 ${optionClass}`}
                     data-testid={`option-${index}`}
                   >
                     <motion.span 
                       className="w-8 h-8 rounded-full bg-sky-100 flex items-center justify-center text-sky-700 font-medium text-sm shrink-0"
-                      animate={selectedAnswer === index && result?.correct ? { scale: [1, 1.2, 1] } : {}}
-                      transition={{ duration: 0.3 }}
+                      animate={selectedAnswer === index && result?.correct ? { scale: [1, 1.15, 1] } : {}}
+                      transition={{ duration: 0.6, ease: "easeInOut" }}
                     >
                       {String.fromCharCode(65 + index)}
                     </motion.span>
                     <span className="flex-1">{option}</span>
                     {selectedAnswer !== null && index === result?.correct_answer && (
                       <motion.div
-                        initial={{ scale: 0, rotate: -180 }}
-                        animate={{ scale: 1, rotate: 0 }}
-                        transition={{ type: "spring", stiffness: 200 }}
+                        initial={{ scale: 0, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        transition={{ duration: 0.5, ease: "easeOut" }}
                       >
-                        <CheckCircle className="w-6 h-6 text-green-500 shrink-0" />
+                        <CheckCircle className="w-6 h-6 text-emerald-500 shrink-0" />
                       </motion.div>
                     )}
                     {selectedAnswer !== null && index === selectedAnswer && !result?.correct && (
                       <motion.div
-                        initial={{ scale: 0 }}
-                        animate={{ scale: 1 }}
-                        transition={{ type: "spring", stiffness: 200 }}
+                        initial={{ scale: 0, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        transition={{ duration: 0.5, ease: "easeOut" }}
                       >
-                        <XCircle className="w-6 h-6 text-red-500 shrink-0" />
+                        <XCircle className="w-6 h-6 text-amber-500 shrink-0" />
                       </motion.div>
                     )}
                   </motion.button>
@@ -276,17 +282,17 @@ export default function PlayPage() {
                 animate={{ opacity: 1, y: 0 }}
                 className="mt-8"
               >
-                <div className={`p-4 rounded-2xl mb-4 ${result.correct ? 'bg-green-50 text-green-700' : 'bg-orange-50 text-orange-700'}`}>
+                <div className={`p-4 rounded-2xl mb-4 ${result.correct ? 'bg-emerald-50/80 text-emerald-700 border border-emerald-100' : 'bg-amber-50/80 text-amber-700 border border-amber-100'}`}>
                   <p className="font-medium flex items-center gap-2">
                     {result.correct ? (
                       <>
                         <CheckCircle className="w-5 h-5" />
-                        Correct! +{result.xp_earned} XP
+                        Lovely! +{result.xp_earned} XP
                       </>
                     ) : (
                       <>
                         <XCircle className="w-5 h-5" />
-                        Not quite! The correct answer was {String.fromCharCode(65 + result.correct_answer)}
+                        Almost — the answer was {String.fromCharCode(65 + result.correct_answer)}
                       </>
                     )}
                   </p>

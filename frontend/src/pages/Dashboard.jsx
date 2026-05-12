@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import { Button } from "../components/ui/button";
 import { Progress } from "../components/ui/progress";
 import { useAuth, API } from "../App";
-import { Play, Trophy, ShoppingBag, User, LogOut, Zap, Target, Star, Gift, Flame } from "lucide-react";
+import { Play, Trophy, ShoppingBag, User, LogOut, Zap, Target, Star, Gift, Flame, Settings } from "lucide-react";
 import { KiteCharacter, CompanionCharacter } from "../components/KiteCharacter";
 import { useState, useEffect } from "react";
 import axios from "axios";
@@ -92,6 +92,15 @@ export default function DashboardPage() {
               data-testid="nav-profile"
             >
               <User className="w-5 h-5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="rounded-full hover:bg-sky-50 text-sky-600"
+              onClick={() => navigate('/settings')}
+              data-testid="nav-settings"
+            >
+              <Settings className="w-5 h-5" />
             </Button>
             <Button
               variant="ghost"

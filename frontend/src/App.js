@@ -13,6 +13,7 @@ import { PlayPage } from "./pages/Play";
 import { ShopPage } from "./pages/Shop";
 import { LeaderboardPage } from "./pages/Leaderboard";
 import { ProfilePage } from "./pages/Profile";
+import { SettingsPage } from "./pages/Settings";
 
 // Contexts
 import { AudioProvider } from "./contexts/AudioContext";
@@ -224,6 +225,11 @@ const AppRouter = () => {
       <Route path="/profile" element={
         <ProtectedRoute>
           <ProfilePage />
+        </ProtectedRoute>
+      } />
+      <Route path="/settings" element={
+        <ProtectedRoute>
+          <SettingsPage />
         </ProtectedRoute>
       } />
       <Route path="*" element={<Navigate to="/" replace />} />
