@@ -7,7 +7,7 @@ Build a trivia app called Kite with:
 - Weekly leaderboard
 - 5th grade level questions to start
 - Both JWT auth and Google OAuth login
-- Light/clean sky theme
+- Light/clean, dreamy sky theme — never arcade-like
 
 ## Architecture
 - **Frontend**: React 19 + Tailwind CSS + Framer Motion + Shadcn UI
@@ -16,9 +16,9 @@ Build a trivia app called Kite with:
 - **Auth**: JWT sessions (cookie-based) + Emergent Google OAuth
 
 ## User Personas
-1. **Casual Player**: Wants quick, fun trivia sessions
-2. **Collector**: Motivated by unlocking characters
-3. **Competitor**: Aims for leaderboard rankings
+1. **Casual Player**: Quick, calming trivia sessions
+2. **Collector**: Motivated by unlocking kites, companions, sky themes
+3. **Competitor**: Aims for the weekly leaderboard
 
 ## Core Requirements (Static)
 - [x] Authentication (JWT + Google OAuth)
@@ -26,119 +26,94 @@ Build a trivia app called Kite with:
 - [x] Trivia gameplay with XP/leveling
 - [x] Character unlock system with level gates
 - [x] Weekly leaderboard
-- [x] CashApp payment integration (manual)
+- [x] CashApp payment (manual verification)
 - [x] 5th grade starting difficulty
-
-## What's Been Implemented
-
-### v1.0 - MVP (Initial Build)
-- Full authentication system (JWT + Google OAuth)
-- 20 trivia questions (General, Science, History, Pop Culture)
-- 10 characters (5 cute kites, 5 animal kites)
-- Leaderboard with rankings
-- User profiles with stats
-- CashApp purchase flow
-
-### v1.1 - Audit & Improvements (Current)
-- **110 NEW questions** across 5 categories:
-  - Animals (20 questions)
-  - Space (20 questions)
-  - Geography (20 questions)
-  - Music (20 questions)
-  - Weird Facts (20 questions)
-  - Plus original 10 questions
-- **Daily Reward System**:
-  - Login streak tracking
-  - Base 25 XP + streak bonus (up to 35 XP)
-  - Milestone rewards at 7, 14, 30 days
-- **Question Randomization**: Using MongoDB $sample aggregation
-- **UI Polish**:
-  - Answer feedback animations
-  - Daily reward banner on dashboard
-  - Streak counter display
+- [x] Ambient music + sound effects with user controls
+- [x] Calm, dreamy, non-arcade visual identity
 
 ## Feature Status
 
 | Feature | Status |
 |---------|--------|
-| Authentication | ✅ Fully Working |
-| Account Persistence | ✅ Fully Working |
-| XP Saving | ✅ Fully Working |
-| Level Progression | ✅ Fully Working |
-| Leaderboard | ✅ Fully Working |
-| Character Unlock System | ✅ Fully Working |
-| Question Randomization | ✅ Fully Working |
-| Daily Rewards | ✅ Fully Working |
-| Shop Purchase (CashApp) | ⚠️ Manual Verification Required |
+| Authentication (JWT + Google) | Working |
+| Account / XP / Level | Working |
+| Leaderboard + my-rank | Working |
+| Character unlock + equip | Working |
+| Daily rewards + streak | Working |
+| Question randomization (505 Qs) | Working |
+| Ambient music + 3 tracks | Working |
+| Sound effects (WebAudio chimes) | Working |
+| Settings page (persistent) | Working |
+| Gentle answer-feedback palette | Working |
+| Shop / CashApp purchase | Manual verification |
+
+## What's Been Implemented
+
+### v1.0 — MVP
+- Auth (JWT + Google OAuth)
+- 20 trivia questions
+- 10 starter characters
+- Leaderboard, profile, CashApp purchase flow
+
+### v1.1 — Audit & Improvements
+- 110+ new questions, daily rewards, streak tracking, randomization, answer feedback animations
+
+### v1.2 — Atmospheric Enhancement
+- Ambient audio system + 3 royalty-free tracks
+- Atmospheric background (clouds, particles, wind lines, 12 sky themes)
+- Expanded marketplace: 20 kites, 11 companions, 12 sky themes (rarity tiers)
+- 220 total questions across 15 categories
+
+### v1.3 — Depth & Calm Settings (Feb 2026 — current)
+- **505 trivia questions** across 12 categories (animals, nature, travel, art, science, pop_culture, history, whimsical, general, space, music, movies)
+- Backend refactor: inline 230-line seed list extracted to `/app/backend/questions_db.py`; `seed_questions()` is now 6 lines
+- **New Settings page** (`/settings`) with:
+  - Ambient music on/off toggle (persisted)
+  - Volume slider with soft cap (persisted)
+  - Three ambient tracks: Serene Sky, Sleepy Clouds, Dream Drift (persisted)
+  - Sound-effects toggle + preview buttons (persisted)
+- **Gentle sound effects** generated with WebAudio (no external assets): soft major-triad chime for correct, calm minor-second descent for incorrect, magical chime for level-up/reward
+- **Polished Play feedback**: emerald glow on correct answer, amber tone on incorrect (no harsh red/green)
+- LocalStorage persistence: `kite_audio_isPlaying`, `kite_audio_volume`, `kite_audio_track`, `kite_audio_sfx`
+- Dashboard nav now has gear icon → Settings
+
+## Database Collections
+- `users`: accounts + game stats + ownership
+- `user_sessions`: 7-day cookie sessions
+- `questions`: **505** trivia questions
+- `characters`: 43 marketplace items
+- `purchases`: purchase records (manual confirmation)
 
 ## Prioritized Backlog
 
-### P0 (Critical - Before Beta)
+### P0 (Critical — Before Beta)
 - [ ] Admin panel for purchase verification
 - [ ] Email confirmation for purchases
 
 ### P1 (Important)
-- [ ] More question categories (Movies, Sports, Food)
-- [ ] Difficulty progression within levels
-- [ ] Sound effects (optional toggle)
+- [ ] Push notifications for daily rewards
+- [ ] More categories (Sports, Food, Mythology)
+- [ ] Difficulty curve refinement
 
 ### P2 (Nice to Have)
-- [ ] Multiplayer mode
-- [ ] Friends list
+- [ ] Multiplayer / friends list
 - [ ] Achievement badges
-- [ ] Seasonal events
+- [ ] Seasonal sky themes (autumn, winter)
 
-## Database Collections
-- `users`: User accounts with game stats
-- `user_sessions`: Auth sessions (7-day expiry)
-- `questions`: 130 trivia questions
-- `characters`: 10 kite characters
-- `purchases`: Purchase records
+## Key Files
+- `/app/backend/server.py` — FastAPI app, all routes
+- `/app/backend/questions_db.py` — 505 questions
+- `/app/backend/tests/test_kite_trivia.py` — pytest regression (16 tests)
+- `/app/frontend/src/contexts/AudioContext.jsx` — audio + SFX state, localStorage persistence
+- `/app/frontend/src/pages/Settings.jsx` — calming settings page
+- `/app/frontend/src/pages/Play.jsx` — dreamy feedback palette
+- `/app/frontend/src/pages/Dashboard.jsx` — nav with Settings
 
-## Next Tasks
-1. Add admin endpoint for purchase confirmation
-2. Add more question categories
-3. Consider push notifications for daily rewards
+## Testing
+- Backend: 16/16 pytest (auth, questions variety, answers, leaderboard, characters, daily reward, profile)
+- Frontend: All data-testids verified; persistence across reload confirmed; gentle palette confirmed
 
----
-
-## v1.2 - Atmospheric Enhancement (Current)
-
-### New Features Implemented
-
-#### Audio & Atmosphere
-- **Ambient Audio System**: Soft background music with volume control
-- **Atmospheric Backgrounds**: Dynamic backgrounds with floating clouds, particles, and wind lines
-- **Sky Theme System**: 12 unlockable sky themes that change the app's atmosphere
-  - Dawn (free), Clear Day, Sunset Glow, Twilight, Cloudy Dreams, Golden Hour
-  - Starry Night, Moonlit, Gentle Rain, Aurora Borealis, Celestial Night, Cherry Blossom Sky
-
-#### Expanded Marketplace (43 items total)
-- **20 Kites**: From Basic to Legendary (Phoenix, Aurora, Neon Cyber)
-- **11 Companions**: Creatures that follow your kite (Fox, Owl, Dragon, Spirit Deer)
-- **12 Sky Themes**: Atmospheric backgrounds
-
-#### Rarity System
-- Common, Rare, Epic, Legendary tiers
-- Legendary items have shimmer animation effects
-- Level-gated unlocks
-
-#### Expanded Questions (220 total)
-- 15 categories: Animals, Space, Geography, Music, Movies, Nostalgia, Brain Teasers, Internet Culture, Would You Rather, World Trivia, Weird Facts, General, Science, History, Pop Culture
-- Questions rotate intelligently with random selection
-
-#### User Experience
-- Calm, relaxing aesthetic maintained throughout
-- Smooth transitions and gentle animations
-- Discovery-based progression (levels unlock new skies, companions, kites)
-
-### Database Stats
-- Questions: 220 across 15 categories
-- Characters: 43 (20 kites, 11 companions, 12 sky themes)
-- User fields: current_companion, current_sky_theme, owned_companions, owned_sky_themes
-
-### Remaining for Beta
-- [ ] Admin panel for purchase verification
-- [ ] Push notifications for daily rewards
-- [ ] Sound effects (optional toggle)
-- [ ] More questions (target: 500+)
+## Next Action Items
+1. Build admin panel for CashApp purchase verification (P0)
+2. Add push notification scaffolding for daily rewards (P1)
+3. Difficulty curve refinement based on player level (P1)
