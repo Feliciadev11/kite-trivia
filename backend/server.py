@@ -13,6 +13,7 @@ from datetime import datetime, timezone, timedelta
 import bcrypt
 import httpx
 import random
+from questions_db import QUESTIONS
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
