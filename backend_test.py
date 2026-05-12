@@ -126,10 +126,19 @@ class KiteTriviaAPITester:
         """Test trivia questions endpoints"""
         print("\n🔍 Testing Trivia Questions...")
         
-        # Get questions
-        success, response = self.run_test("Get Questions", "GET", "questions?difficulty=1&limit=5", 200)
+        # Get questions with different difficulties
+        success, response = self.run_test("Get Questions (Difficulty 1)", "GET", "questions?difficulty=1&limit=5", 200)
+        self.run_test("Get Questions (Difficulty 2)", "GET", "questions?difficulty=2&limit=5", 200)
+        self.run_test("Get Questions (Difficulty 3)", "GET", "questions?difficulty=3&limit=5", 200)
         
+        # Check if questions are from multiple categories
         if success and response and len(response) > 0:
+            categories = set([q.get("category") for q in response])
+            if len(categories) > 1:
+                self.log_test("Multiple Categories", "PASS", f"Questions from {len(categories)} categories: {categories}")
+            else:
+                self.log_test("Multiple Categories", "INFO", f"Questions from {len(categories)} category: {categories}")
+            
             question = response[0]
             
             # Test answer submission
@@ -151,13 +160,26 @@ class KiteTriviaAPITester:
         """Test character endpoints"""
         print("\n🔍 Testing Characters...")
         
-        # Get characters
-        success, response = self.run_test("Get Characters", "GET", "characters", 200)
+        # Get all characters
+        success, response = self.run_test("Get All Characters", "GET", "characters", 200)
+        
+        # Get characters by category
+        self.run_test("Get Kites", "GET", "characters?category=kite", 200)
+        self.run_test("Get Companions", "GET", "characters?category=companion", 200)
+        self.run_test("Get Sky Themes", "GET", "characters?category=sky_theme", 200)
         
         if success and response and len(response) > 0:
-            # Test equip character (should have basic_kite)
-            equip_data = {"character_id": "basic_kite"}
-            self.run_test("Equip Character", "POST", "characters/equip", 200, equip_data)
+            # Test equip kite (should have basic_kite)
+            equip_data = {"character_id": "basic_kite", "type": "kite"}
+            self.run_test("Equip Kite", "POST", "characters/equip", 200, equip_data)
+            
+            # Test equip companion (user should have dawn sky theme by default)
+            equip_data = {"character_id": "dawn", "type": "sky_theme"}
+            self.run_test("Equip Sky Theme", "POST", "characters/equip", 200, equip_data)
+            
+            # Test equip companion with None (unequip)
+            equip_data = {"character_id": None, "type": "companion"}
+            self.run_test("Unequip Companion", "POST", "characters/equip", 200, equip_data)
             
             # Test purchase character (find one that's available at level 1 or free)
             for char in response:
@@ -189,6 +211,20 @@ class KiteTriviaAPITester:
         print("\n🔍 Testing Profile...")
         
         self.run_test("Get Profile", "GET", "profile", 200)
+    
+    def test_daily_rewards(self):
+        """Test daily reward endpoints"""
+        print("\n🔍 Testing Daily Rewards...")
+        
+        success, response = self.run_test("Get Daily Reward Status", "GET", "daily-reward", 200)
+        
+        if success and response:
+            if response.get("can_claim"):
+                self.run_test("Claim Daily Reward", "POST", "daily-reward/claim", 200)
+            else:
+                self.log_test("Daily Reward Already Claimed", "INFO", "Reward already claimed today")
+        
+        return success
 
     def test_logout(self):
         """Test logout"""
@@ -210,6 +246,7 @@ class KiteTriviaAPITester:
             self.test_characters()
             self.test_leaderboard()
             self.test_profile()
+            self.test_daily_rewards()
             self.test_logout()
         else:
             print("❌ Registration failed, skipping authenticated tests")

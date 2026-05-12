@@ -59,7 +59,11 @@ class User(BaseModel):
     picture: Optional[str] = None
     coins: int = 0
     current_character: str = "basic_kite"
+    current_companion: Optional[str] = None
+    current_sky_theme: str = "dawn"
     owned_characters: List[str] = ["basic_kite"]
+    owned_companions: List[str] = []
+    owned_sky_themes: List[str] = ["dawn"]
     level: int = 1
     xp: int = 0
     total_correct: int = 0
@@ -77,7 +81,8 @@ class Character(BaseModel):
     name: str
     description: str
     price: float
-    category: str  # "cute_kite" or "animal_kite"
+    category: str  # "kite", "companion", "sky_theme"
+    rarity: str = "common"  # common, rare, epic, legendary
     image_url: str
     unlock_level: int = 0
 
@@ -174,7 +179,11 @@ async def register(user_data: UserCreate, response: Response):
         "picture": None,
         "coins": 0,
         "current_character": "basic_kite",
+        "current_companion": None,
+        "current_sky_theme": "dawn",
         "owned_characters": ["basic_kite"],
+        "owned_companions": [],
+        "owned_sky_themes": ["dawn"],
         "level": 1,
         "xp": 0,
         "total_correct": 0,
@@ -303,7 +312,11 @@ async def exchange_session(request: Request, response: Response):
             "picture": picture,
             "coins": 0,
             "current_character": "basic_kite",
+            "current_companion": None,
+            "current_sky_theme": "dawn",
             "owned_characters": ["basic_kite"],
+            "owned_companions": [],
+            "owned_sky_themes": ["dawn"],
             "level": 1,
             "xp": 0,
             "total_correct": 0,
@@ -438,13 +451,14 @@ async def submit_answer(
 # ==================== CHARACTER ROUTES ====================
 
 @api_router.get("/characters", response_model=List[Character])
-async def get_characters():
-    """Get all available characters"""
-    characters = await db.characters.find({}, {"_id": 0}).to_list(100)
+async def get_characters(category: Optional[str] = None):
+    """Get all available characters, optionally filtered by category"""
+    query = {} if not category else {"category": category}
+    characters = await db.characters.find(query, {"_id": 0}).to_list(200)
     
     if not characters:
         await seed_characters()
-        characters = await db.characters.find({}, {"_id": 0}).to_list(100)
+        characters = await db.characters.find(query, {"_id": 0}).to_list(200)
     
     return characters
 
@@ -453,18 +467,34 @@ async def equip_character(
     data: dict,
     current_user: User = Depends(get_current_user)
 ):
-    """Equip an owned character"""
+    """Equip an owned character, companion, or sky theme"""
     character_id = data.get("character_id")
+    item_type = data.get("type", "kite")  # kite, companion, sky_theme
     
-    if character_id not in current_user.owned_characters:
-        raise HTTPException(status_code=403, detail="Character not owned")
-    
-    await db.users.update_one(
-        {"user_id": current_user.user_id},
-        {"$set": {"current_character": character_id}}
-    )
-    
-    return {"message": "Character equipped", "character_id": character_id}
+    if item_type == "companion":
+        if character_id and character_id not in current_user.owned_companions:
+            raise HTTPException(status_code=403, detail="Companion not owned")
+        await db.users.update_one(
+            {"user_id": current_user.user_id},
+            {"$set": {"current_companion": character_id}}
+        )
+        return {"message": "Companion equipped", "companion_id": character_id}
+    elif item_type == "sky_theme":
+        if character_id not in current_user.owned_sky_themes:
+            raise HTTPException(status_code=403, detail="Sky theme not owned")
+        await db.users.update_one(
+            {"user_id": current_user.user_id},
+            {"$set": {"current_sky_theme": character_id}}
+        )
+        return {"message": "Sky theme equipped", "sky_theme_id": character_id}
+    else:
+        if character_id not in current_user.owned_characters:
+            raise HTTPException(status_code=403, detail="Character not owned")
+        await db.users.update_one(
+            {"user_id": current_user.user_id},
+            {"$set": {"current_character": character_id}}
+        )
+        return {"message": "Character equipped", "character_id": character_id}
 
 @api_router.post("/characters/purchase")
 async def purchase_character(
@@ -480,7 +510,16 @@ async def purchase_character(
     if not character:
         raise HTTPException(status_code=404, detail="Character not found")
     
-    if purchase.character_id in current_user.owned_characters:
+    # Check which list to check based on category
+    category = character.get("category", "kite")
+    if category == "companion":
+        owned_list = current_user.owned_companions
+    elif category == "sky_theme":
+        owned_list = current_user.owned_sky_themes
+    else:
+        owned_list = current_user.owned_characters
+    
+    if purchase.character_id in owned_list:
         raise HTTPException(status_code=400, detail="Already owned")
     
     # Check level requirement
@@ -496,6 +535,7 @@ async def purchase_character(
         "purchase_id": purchase_id,
         "user_id": current_user.user_id,
         "character_id": purchase.character_id,
+        "category": category,
         "price": character["price"],
         "status": "pending",
         "created_at": datetime.now(timezone.utc).isoformat()
@@ -532,10 +572,18 @@ async def confirm_purchase(
         {"$set": {"status": "completed"}}
     )
     
-    # Add character to user
+    # Add to appropriate owned list based on category
+    category = purchase.get("category", "kite")
+    if category == "companion":
+        field = "owned_companions"
+    elif category == "sky_theme":
+        field = "owned_sky_themes"
+    else:
+        field = "owned_characters"
+    
     await db.users.update_one(
         {"user_id": current_user.user_id},
-        {"$addToSet": {"owned_characters": purchase["character_id"]}}
+        {"$addToSet": {field: purchase["character_id"]}}
     )
     
     return {"message": "Purchase confirmed", "character_id": purchase["character_id"]}
@@ -809,6 +857,108 @@ async def seed_questions():
         {"question_id": "gen_8", "question": "What is the chemical symbol for gold?", "options": ["Go", "Gd", "Au", "Ag"], "correct_answer": 2, "category": "science", "difficulty": 2, "xp_reward": 15},
         {"question_id": "gen_9", "question": "Who wrote 'Romeo and Juliet'?", "options": ["Dickens", "Shakespeare", "Twain", "Austen"], "correct_answer": 1, "category": "general", "difficulty": 2, "xp_reward": 15},
         {"question_id": "gen_10", "question": "What is the powerhouse of the cell?", "options": ["Nucleus", "Ribosome", "Mitochondria", "Chloroplast"], "correct_answer": 2, "category": "science", "difficulty": 3, "xp_reward": 20},
+        
+        # ========== MOVIES (20 questions) ==========
+        {"question_id": "movie_1", "question": "What color is Shrek?", "options": ["Blue", "Green", "Purple", "Orange"], "correct_answer": 1, "category": "movies", "difficulty": 1, "xp_reward": 10},
+        {"question_id": "movie_2", "question": "In Frozen, what is Elsa's power?", "options": ["Fire", "Ice", "Wind", "Water"], "correct_answer": 1, "category": "movies", "difficulty": 1, "xp_reward": 10},
+        {"question_id": "movie_3", "question": "What is the name of Simba's father in Lion King?", "options": ["Scar", "Mufasa", "Timon", "Pumbaa"], "correct_answer": 1, "category": "movies", "difficulty": 1, "xp_reward": 10},
+        {"question_id": "movie_4", "question": "What does E.T. want to do?", "options": ["Eat", "Phone home", "Dance", "Sleep"], "correct_answer": 1, "category": "movies", "difficulty": 1, "xp_reward": 10},
+        {"question_id": "movie_5", "question": "In Toy Story, what type of toy is Woody?", "options": ["Astronaut", "Cowboy", "Soldier", "Robot"], "correct_answer": 1, "category": "movies", "difficulty": 1, "xp_reward": 10},
+        {"question_id": "movie_6", "question": "What is the name of Harry Potter's owl?", "options": ["Errol", "Hedwig", "Pigwidgeon", "Scabbers"], "correct_answer": 1, "category": "movies", "difficulty": 1, "xp_reward": 10},
+        {"question_id": "movie_7", "question": "In Inside Out, what color is Joy?", "options": ["Blue", "Red", "Yellow", "Green"], "correct_answer": 2, "category": "movies", "difficulty": 1, "xp_reward": 10},
+        {"question_id": "movie_8", "question": "What kind of animal is Dumbo?", "options": ["Mouse", "Elephant", "Dog", "Cat"], "correct_answer": 1, "category": "movies", "difficulty": 1, "xp_reward": 10},
+        {"question_id": "movie_9", "question": "In Moana, what is Maui's magical item?", "options": ["Necklace", "Fish hook", "Sword", "Staff"], "correct_answer": 1, "category": "movies", "difficulty": 2, "xp_reward": 15},
+        {"question_id": "movie_10", "question": "What is Lightning McQueen's number?", "options": ["95", "86", "52", "43"], "correct_answer": 0, "category": "movies", "difficulty": 1, "xp_reward": 10},
+        {"question_id": "movie_11", "question": "In Up, what does Carl use to fly his house?", "options": ["Rockets", "Balloons", "Propellers", "Magic"], "correct_answer": 1, "category": "movies", "difficulty": 1, "xp_reward": 10},
+        {"question_id": "movie_12", "question": "What is the name of Nemo's dad?", "options": ["Martin", "Marlin", "Marcus", "Mario"], "correct_answer": 1, "category": "movies", "difficulty": 1, "xp_reward": 10},
+        {"question_id": "movie_13", "question": "In Encanto, what is Mirabel's gift?", "options": ["Strength", "She has none", "Flowers", "Animals"], "correct_answer": 1, "category": "movies", "difficulty": 2, "xp_reward": 15},
+        {"question_id": "movie_14", "question": "What studio made Spirited Away?", "options": ["Disney", "Pixar", "DreamWorks", "Studio Ghibli"], "correct_answer": 3, "category": "movies", "difficulty": 2, "xp_reward": 15},
+        {"question_id": "movie_15", "question": "In Coco, what does Miguel love?", "options": ["Cooking", "Music", "Dancing", "Painting"], "correct_answer": 1, "category": "movies", "difficulty": 1, "xp_reward": 10},
+        {"question_id": "movie_16", "question": "What is Olaf in Frozen?", "options": ["Reindeer", "Snowman", "Troll", "Prince"], "correct_answer": 1, "category": "movies", "difficulty": 1, "xp_reward": 10},
+        {"question_id": "movie_17", "question": "In Ratatouille, what is Remy?", "options": ["Chef", "Rat", "Cat", "Dog"], "correct_answer": 1, "category": "movies", "difficulty": 1, "xp_reward": 10},
+        {"question_id": "movie_18", "question": "What princess has the longest hair?", "options": ["Ariel", "Belle", "Rapunzel", "Cinderella"], "correct_answer": 2, "category": "movies", "difficulty": 1, "xp_reward": 10},
+        {"question_id": "movie_19", "question": "In WALL-E, what does WALL-E collect?", "options": ["Plants", "Trash", "Robots", "Stars"], "correct_answer": 1, "category": "movies", "difficulty": 2, "xp_reward": 15},
+        {"question_id": "movie_20", "question": "What is Groot's famous line?", "options": ["Hello there", "I am Groot", "To infinity", "Avengers"], "correct_answer": 1, "category": "movies", "difficulty": 1, "xp_reward": 10},
+        
+        # ========== NOSTALGIA (15 questions) ==========
+        {"question_id": "nostalgia_1", "question": "What device played cassette tapes?", "options": ["CD player", "Walkman", "iPod", "Radio"], "correct_answer": 1, "category": "nostalgia", "difficulty": 2, "xp_reward": 15},
+        {"question_id": "nostalgia_2", "question": "What color was the original Game Boy?", "options": ["Black", "White", "Gray", "Blue"], "correct_answer": 2, "category": "nostalgia", "difficulty": 2, "xp_reward": 15},
+        {"question_id": "nostalgia_3", "question": "What toy could you wind up and watch walk?", "options": ["Slinky", "Wind-up toy", "Rubik's cube", "Yo-yo"], "correct_answer": 1, "category": "nostalgia", "difficulty": 1, "xp_reward": 10},
+        {"question_id": "nostalgia_4", "question": "What did you use to rewind a VHS tape?", "options": ["Remote", "Your hand", "Rewinder", "All of these"], "correct_answer": 3, "category": "nostalgia", "difficulty": 2, "xp_reward": 15},
+        {"question_id": "nostalgia_5", "question": "What classic toy is a spring that walks downstairs?", "options": ["Yo-yo", "Slinky", "Top", "Ball"], "correct_answer": 1, "category": "nostalgia", "difficulty": 1, "xp_reward": 10},
+        {"question_id": "nostalgia_6", "question": "What snack came in fun fruit shapes?", "options": ["Goldfish", "Fruit snacks", "Chips", "Cookies"], "correct_answer": 1, "category": "nostalgia", "difficulty": 1, "xp_reward": 10},
+        {"question_id": "nostalgia_7", "question": "What sound did dial-up internet make?", "options": ["Silence", "Beeping", "Screeching", "Music"], "correct_answer": 2, "category": "nostalgia", "difficulty": 2, "xp_reward": 15},
+        {"question_id": "nostalgia_8", "question": "What could you collect and trade at school?", "options": ["Marbles", "All of these", "Cards", "Stickers"], "correct_answer": 1, "category": "nostalgia", "difficulty": 1, "xp_reward": 10},
+        {"question_id": "nostalgia_9", "question": "What did you use to call friends before cell phones?", "options": ["Landline", "Email", "Texting", "Fax"], "correct_answer": 0, "category": "nostalgia", "difficulty": 1, "xp_reward": 10},
+        {"question_id": "nostalgia_10", "question": "What toy let you draw then shake to erase?", "options": ["Etch A Sketch", "Magna Doodle", "Lite-Brite", "Spirograph"], "correct_answer": 0, "category": "nostalgia", "difficulty": 2, "xp_reward": 15},
+        {"question_id": "nostalgia_11", "question": "What video store was famous for movie rentals?", "options": ["Netflix", "Blockbuster", "Redbox", "Hulu"], "correct_answer": 1, "category": "nostalgia", "difficulty": 2, "xp_reward": 15},
+        {"question_id": "nostalgia_12", "question": "What handheld game had falling blocks?", "options": ["Pac-Man", "Tetris", "Snake", "Pong"], "correct_answer": 1, "category": "nostalgia", "difficulty": 1, "xp_reward": 10},
+        {"question_id": "nostalgia_13", "question": "What did kids use to blow bubbles?", "options": ["Straw", "Bubble wand", "Hands", "Paper"], "correct_answer": 1, "category": "nostalgia", "difficulty": 1, "xp_reward": 10},
+        {"question_id": "nostalgia_14", "question": "What was a popular virtual pet from the 90s?", "options": ["Furby", "Tamagotchi", "Giga Pet", "All of these"], "correct_answer": 3, "category": "nostalgia", "difficulty": 2, "xp_reward": 15},
+        {"question_id": "nostalgia_15", "question": "What playground equipment goes up and down?", "options": ["Slide", "Swings", "Seesaw", "Monkey bars"], "correct_answer": 2, "category": "nostalgia", "difficulty": 1, "xp_reward": 10},
+        
+        # ========== BRAIN TEASERS (15 questions) ==========
+        {"question_id": "brain_1", "question": "What has hands but can't clap?", "options": ["Robot", "Clock", "Gloves", "Statue"], "correct_answer": 1, "category": "brain_teaser", "difficulty": 2, "xp_reward": 15},
+        {"question_id": "brain_2", "question": "What has a head and tail but no body?", "options": ["Snake", "Coin", "Arrow", "Fish"], "correct_answer": 1, "category": "brain_teaser", "difficulty": 2, "xp_reward": 15},
+        {"question_id": "brain_3", "question": "What gets wetter the more it dries?", "options": ["Sponge", "Paper", "Towel", "Hair"], "correct_answer": 2, "category": "brain_teaser", "difficulty": 2, "xp_reward": 15},
+        {"question_id": "brain_4", "question": "What can you catch but not throw?", "options": ["Ball", "Cold", "Fish", "Frisbee"], "correct_answer": 1, "category": "brain_teaser", "difficulty": 2, "xp_reward": 15},
+        {"question_id": "brain_5", "question": "What has keys but no locks?", "options": ["House", "Car", "Piano", "Safe"], "correct_answer": 2, "category": "brain_teaser", "difficulty": 2, "xp_reward": 15},
+        {"question_id": "brain_6", "question": "What has teeth but cannot bite?", "options": ["Shark", "Comb", "Dog", "Person"], "correct_answer": 1, "category": "brain_teaser", "difficulty": 2, "xp_reward": 15},
+        {"question_id": "brain_7", "question": "What can travel around the world while staying in a corner?", "options": ["Airplane", "Bird", "Stamp", "Cloud"], "correct_answer": 2, "category": "brain_teaser", "difficulty": 2, "xp_reward": 15},
+        {"question_id": "brain_8", "question": "What has a neck but no head?", "options": ["Giraffe", "Person", "Bottle", "Bird"], "correct_answer": 2, "category": "brain_teaser", "difficulty": 2, "xp_reward": 15},
+        {"question_id": "brain_9", "question": "What goes up but never comes down?", "options": ["Balloon", "Age", "Rocket", "Temperature"], "correct_answer": 1, "category": "brain_teaser", "difficulty": 2, "xp_reward": 15},
+        {"question_id": "brain_10", "question": "What has an eye but cannot see?", "options": ["Blind person", "Needle", "Camera", "Telescope"], "correct_answer": 1, "category": "brain_teaser", "difficulty": 2, "xp_reward": 15},
+        {"question_id": "brain_11", "question": "What is always in front of you but can't be seen?", "options": ["Air", "Future", "Time", "Wind"], "correct_answer": 1, "category": "brain_teaser", "difficulty": 3, "xp_reward": 20},
+        {"question_id": "brain_12", "question": "What can fill a room but takes no space?", "options": ["Furniture", "Light", "Air", "Sound"], "correct_answer": 1, "category": "brain_teaser", "difficulty": 2, "xp_reward": 15},
+        {"question_id": "brain_13", "question": "What word is spelled wrong in every dictionary?", "options": ["Dictionary", "Wrong", "Word", "Every"], "correct_answer": 1, "category": "brain_teaser", "difficulty": 2, "xp_reward": 15},
+        {"question_id": "brain_14", "question": "What has four fingers and a thumb but isn't alive?", "options": ["Robot", "Glove", "Hand", "Statue"], "correct_answer": 1, "category": "brain_teaser", "difficulty": 2, "xp_reward": 15},
+        {"question_id": "brain_15", "question": "What building has the most stories?", "options": ["Skyscraper", "Library", "School", "Hospital"], "correct_answer": 1, "category": "brain_teaser", "difficulty": 2, "xp_reward": 15},
+        
+        # ========== INTERNET CULTURE (15 questions) ==========
+        {"question_id": "internet_1", "question": "What does 'LOL' stand for?", "options": ["Lots of luck", "Laugh out loud", "Love our life", "Look out left"], "correct_answer": 1, "category": "internet", "difficulty": 1, "xp_reward": 10},
+        {"question_id": "internet_2", "question": "What is a 'selfie'?", "options": ["Solo dance", "Self portrait", "Self timer", "Solo game"], "correct_answer": 1, "category": "internet", "difficulty": 1, "xp_reward": 10},
+        {"question_id": "internet_3", "question": "What symbol is used for hashtags?", "options": ["@", "#", "&", "*"], "correct_answer": 1, "category": "internet", "difficulty": 1, "xp_reward": 10},
+        {"question_id": "internet_4", "question": "What does 'BRB' mean?", "options": ["Be right back", "Big red bus", "Bring red balloons", "Better run backwards"], "correct_answer": 0, "category": "internet", "difficulty": 1, "xp_reward": 10},
+        {"question_id": "internet_5", "question": "What is an 'emoji'?", "options": ["A dance", "A small picture", "A song", "A game"], "correct_answer": 1, "category": "internet", "difficulty": 1, "xp_reward": 10},
+        {"question_id": "internet_6", "question": "What app has disappearing messages?", "options": ["Facebook", "Snapchat", "Twitter", "LinkedIn"], "correct_answer": 1, "category": "internet", "difficulty": 1, "xp_reward": 10},
+        {"question_id": "internet_7", "question": "What does 'viral' mean online?", "options": ["Sick", "Popular fast", "Secret", "Boring"], "correct_answer": 1, "category": "internet", "difficulty": 1, "xp_reward": 10},
+        {"question_id": "internet_8", "question": "What is a 'meme'?", "options": ["Memory", "Shared joke/image", "Message", "Member"], "correct_answer": 1, "category": "internet", "difficulty": 1, "xp_reward": 10},
+        {"question_id": "internet_9", "question": "What does 'IRL' stand for?", "options": ["In real life", "I really like", "Is really loud", "I run late"], "correct_answer": 0, "category": "internet", "difficulty": 1, "xp_reward": 10},
+        {"question_id": "internet_10", "question": "What is 'streaming'?", "options": ["Water flow", "Watching live content", "Fishing", "Running"], "correct_answer": 1, "category": "internet", "difficulty": 1, "xp_reward": 10},
+        {"question_id": "internet_11", "question": "What does 'GOAT' mean in internet slang?", "options": ["Farm animal", "Greatest of all time", "Get out and talk", "Go on a trip"], "correct_answer": 1, "category": "internet", "difficulty": 2, "xp_reward": 15},
+        {"question_id": "internet_12", "question": "What is a 'podcast'?", "options": ["A video", "Audio show online", "Photo app", "Game"], "correct_answer": 1, "category": "internet", "difficulty": 1, "xp_reward": 10},
+        {"question_id": "internet_13", "question": "What does 'FOMO' stand for?", "options": ["Fear of missing out", "Find our missing owl", "For our mom only", "Fun outdoor moments"], "correct_answer": 0, "category": "internet", "difficulty": 2, "xp_reward": 15},
+        {"question_id": "internet_14", "question": "What is 'Wi-Fi' short for?", "options": ["Wide Field", "Wireless Fidelity", "Win First", "With Fire"], "correct_answer": 1, "category": "internet", "difficulty": 2, "xp_reward": 15},
+        {"question_id": "internet_15", "question": "What does 'TBH' mean?", "options": ["To be happy", "To be honest", "The big house", "Too bad honey"], "correct_answer": 1, "category": "internet", "difficulty": 1, "xp_reward": 10},
+        
+        # ========== WOULD YOU RATHER (10 questions) ==========
+        {"question_id": "wyr_1", "question": "Which would be more fun to have?", "options": ["Fly", "Be invisible", "Read minds", "Time travel"], "correct_answer": 0, "category": "would_you_rather", "difficulty": 1, "xp_reward": 10},
+        {"question_id": "wyr_2", "question": "Which pet would be coolest?", "options": ["Dragon", "Unicorn", "Phoenix", "Griffin"], "correct_answer": 0, "category": "would_you_rather", "difficulty": 1, "xp_reward": 10},
+        {"question_id": "wyr_3", "question": "Which superpower sounds best?", "options": ["Super speed", "Super strength", "Flight", "Healing"], "correct_answer": 2, "category": "would_you_rather", "difficulty": 1, "xp_reward": 10},
+        {"question_id": "wyr_4", "question": "Which would be more exciting?", "options": ["Space travel", "Deep sea explore", "Time travel", "Dimension hop"], "correct_answer": 0, "category": "would_you_rather", "difficulty": 1, "xp_reward": 10},
+        {"question_id": "wyr_5", "question": "Which sounds more peaceful?", "options": ["Beach house", "Mountain cabin", "Treehouse", "Cloud castle"], "correct_answer": 1, "category": "would_you_rather", "difficulty": 1, "xp_reward": 10},
+        {"question_id": "wyr_6", "question": "Which animal would you be?", "options": ["Eagle", "Dolphin", "Wolf", "Owl"], "correct_answer": 1, "category": "would_you_rather", "difficulty": 1, "xp_reward": 10},
+        {"question_id": "wyr_7", "question": "Which sounds more relaxing?", "options": ["Sunset watch", "Stargazing", "Rain sounds", "Ocean waves"], "correct_answer": 3, "category": "would_you_rather", "difficulty": 1, "xp_reward": 10},
+        {"question_id": "wyr_8", "question": "Which weather do you prefer?", "options": ["Sunny", "Rainy", "Snowy", "Windy"], "correct_answer": 0, "category": "would_you_rather", "difficulty": 1, "xp_reward": 10},
+        {"question_id": "wyr_9", "question": "Which sounds cozier?", "options": ["Reading", "Gaming", "Napping", "Crafting"], "correct_answer": 2, "category": "would_you_rather", "difficulty": 1, "xp_reward": 10},
+        {"question_id": "wyr_10", "question": "Which season feels best?", "options": ["Spring", "Summer", "Autumn", "Winter"], "correct_answer": 2, "category": "would_you_rather", "difficulty": 1, "xp_reward": 10},
+        
+        # ========== WORLD TRIVIA (15 questions) ==========
+        {"question_id": "world_1", "question": "What country has the Eiffel Tower?", "options": ["Italy", "Spain", "France", "Germany"], "correct_answer": 2, "category": "world", "difficulty": 1, "xp_reward": 10},
+        {"question_id": "world_2", "question": "What is the largest country by area?", "options": ["China", "USA", "Canada", "Russia"], "correct_answer": 3, "category": "world", "difficulty": 2, "xp_reward": 15},
+        {"question_id": "world_3", "question": "Where are the Pyramids of Giza?", "options": ["Mexico", "Egypt", "India", "Peru"], "correct_answer": 1, "category": "world", "difficulty": 1, "xp_reward": 10},
+        {"question_id": "world_4", "question": "What is Japan's currency?", "options": ["Won", "Yuan", "Yen", "Dollar"], "correct_answer": 2, "category": "world", "difficulty": 2, "xp_reward": 15},
+        {"question_id": "world_5", "question": "Where is the Colosseum?", "options": ["Greece", "Italy", "Spain", "Turkey"], "correct_answer": 1, "category": "world", "difficulty": 1, "xp_reward": 10},
+        {"question_id": "world_6", "question": "What language is most spoken worldwide?", "options": ["Spanish", "English", "Mandarin", "Hindi"], "correct_answer": 2, "category": "world", "difficulty": 2, "xp_reward": 15},
+        {"question_id": "world_7", "question": "Where is Big Ben?", "options": ["Paris", "London", "Berlin", "Dublin"], "correct_answer": 1, "category": "world", "difficulty": 1, "xp_reward": 10},
+        {"question_id": "world_8", "question": "What country invented pizza?", "options": ["USA", "France", "Italy", "Greece"], "correct_answer": 2, "category": "world", "difficulty": 1, "xp_reward": 10},
+        {"question_id": "world_9", "question": "What is the smallest continent?", "options": ["Europe", "Australia", "Antarctica", "South America"], "correct_answer": 1, "category": "world", "difficulty": 2, "xp_reward": 15},
+        {"question_id": "world_10", "question": "Where is the Amazon rainforest?", "options": ["Africa", "Asia", "South America", "Australia"], "correct_answer": 2, "category": "world", "difficulty": 1, "xp_reward": 10},
+        {"question_id": "world_11", "question": "What sea is Israel next to?", "options": ["Red Sea", "Dead Sea", "Both", "Neither"], "correct_answer": 2, "category": "world", "difficulty": 2, "xp_reward": 15},
+        {"question_id": "world_12", "question": "Where do pandas come from?", "options": ["Japan", "Korea", "China", "India"], "correct_answer": 2, "category": "world", "difficulty": 1, "xp_reward": 10},
+        {"question_id": "world_13", "question": "What is the longest wall in the world?", "options": ["Berlin Wall", "Great Wall of China", "Hadrian's Wall", "Western Wall"], "correct_answer": 1, "category": "world", "difficulty": 1, "xp_reward": 10},
+        {"question_id": "world_14", "question": "What continent is Brazil in?", "options": ["Africa", "Europe", "South America", "North America"], "correct_answer": 2, "category": "world", "difficulty": 1, "xp_reward": 10},
+        {"question_id": "world_15", "question": "Where is sushi from?", "options": ["China", "Japan", "Korea", "Thailand"], "correct_answer": 1, "category": "world", "difficulty": 1, "xp_reward": 10},
     ]
     
     for q in questions:
@@ -819,23 +969,81 @@ async def seed_questions():
         )
 
 async def seed_characters():
-    """Seed initial characters"""
+    """Seed expanded marketplace with kites, companions, and sky themes"""
     characters = [
+        # ========== KITES ==========
         # Free starter
-        {"character_id": "basic_kite", "name": "Basic Kite", "description": "A classic diamond kite to start your journey!", "price": 0, "category": "cute_kite", "image_url": "kite_basic", "unlock_level": 0},
+        {"character_id": "basic_kite", "name": "Basic Kite", "description": "A classic diamond kite to start your journey", "price": 0, "category": "kite", "rarity": "common", "image_url": "kite_basic", "unlock_level": 0},
         
-        # Cute Kites
-        {"character_id": "rainbow_kite", "name": "Rainbow Kite", "description": "A colorful rainbow kite that sparkles in the sky!", "price": 2.99, "category": "cute_kite", "image_url": "kite_rainbow", "unlock_level": 2},
-        {"character_id": "star_kite", "name": "Star Kite", "description": "A star-shaped kite that glows at night!", "price": 4.99, "category": "cute_kite", "image_url": "kite_star", "unlock_level": 3},
-        {"character_id": "heart_kite", "name": "Heart Kite", "description": "A lovely heart-shaped kite full of love!", "price": 3.99, "category": "cute_kite", "image_url": "kite_heart", "unlock_level": 2},
-        {"character_id": "cloud_kite", "name": "Cloud Kite", "description": "A fluffy cloud kite that floats among the clouds!", "price": 5.99, "category": "cute_kite", "image_url": "kite_cloud", "unlock_level": 4},
+        # Common Kites (Level 1-2)
+        {"character_id": "rainbow_kite", "name": "Rainbow Kite", "description": "A gentle arc of colors dancing in the breeze", "price": 1.99, "category": "kite", "rarity": "common", "image_url": "kite_rainbow", "unlock_level": 1},
+        {"character_id": "heart_kite", "name": "Heart Kite", "description": "A lovely heart that floats with warmth", "price": 1.99, "category": "kite", "rarity": "common", "image_url": "kite_heart", "unlock_level": 1},
+        {"character_id": "cloud_kite", "name": "Cloud Kite", "description": "As soft and dreamy as the clouds themselves", "price": 2.49, "category": "kite", "rarity": "common", "image_url": "kite_cloud", "unlock_level": 2},
+        {"character_id": "butterfly_kite", "name": "Butterfly Kite", "description": "Delicate wings that catch the gentle wind", "price": 2.49, "category": "kite", "rarity": "common", "image_url": "kite_butterfly", "unlock_level": 2},
         
-        # Animal Kites
-        {"character_id": "butterfly_kite", "name": "Butterfly Kite", "description": "A beautiful butterfly kite with colorful wings!", "price": 3.99, "category": "animal_kite", "image_url": "kite_butterfly", "unlock_level": 2},
-        {"character_id": "dragon_kite", "name": "Dragon Kite", "description": "A fierce dragon kite that breathes wind!", "price": 6.99, "category": "animal_kite", "image_url": "kite_dragon", "unlock_level": 5},
-        {"character_id": "owl_kite", "name": "Owl Kite", "description": "A wise owl kite with big eyes!", "price": 4.99, "category": "animal_kite", "image_url": "kite_owl", "unlock_level": 3},
-        {"character_id": "fish_kite", "name": "Fish Kite", "description": "A swimming fish kite that rides the wind currents!", "price": 3.49, "category": "animal_kite", "image_url": "kite_fish", "unlock_level": 2},
-        {"character_id": "eagle_kite", "name": "Eagle Kite", "description": "A majestic eagle kite soaring high!", "price": 7.99, "category": "animal_kite", "image_url": "kite_eagle", "unlock_level": 6},
+        # Rare Kites (Level 3-4)
+        {"character_id": "star_kite", "name": "Star Kite", "description": "A twinkling star that glows softly at dusk", "price": 3.99, "category": "kite", "rarity": "rare", "image_url": "kite_star", "unlock_level": 3},
+        {"character_id": "owl_kite", "name": "Owl Kite", "description": "A wise companion for evening flights", "price": 3.99, "category": "kite", "rarity": "rare", "image_url": "kite_owl", "unlock_level": 3},
+        {"character_id": "fish_kite", "name": "Koi Fish Kite", "description": "Graceful as a koi swimming through sky-waters", "price": 3.49, "category": "kite", "rarity": "rare", "image_url": "kite_fish", "unlock_level": 3},
+        {"character_id": "retro_rainbow", "name": "Retro Rainbow Kite", "description": "Nostalgic vibes from simpler times", "price": 4.49, "category": "kite", "rarity": "rare", "image_url": "kite_retro", "unlock_level": 4},
+        {"character_id": "sakura_kite", "name": "Sakura Blossom Kite", "description": "Cherry blossoms drift eternally on this peaceful kite", "price": 4.99, "category": "kite", "rarity": "rare", "image_url": "kite_sakura", "unlock_level": 4},
+        
+        # Epic Kites (Level 5-7)
+        {"character_id": "celestial_kite", "name": "Celestial Kite", "description": "Woven from starlight and moonbeams", "price": 5.99, "category": "kite", "rarity": "epic", "image_url": "kite_celestial", "unlock_level": 5},
+        {"character_id": "dragon_kite", "name": "Dragon Kite", "description": "A gentle dragon that rides the wind currents", "price": 5.99, "category": "kite", "rarity": "epic", "image_url": "kite_dragon", "unlock_level": 5},
+        {"character_id": "moon_stars_kite", "name": "Moon & Stars Kite", "description": "The night sky captured in fabric and string", "price": 6.49, "category": "kite", "rarity": "epic", "image_url": "kite_moon", "unlock_level": 6},
+        {"character_id": "jellyfish_kite", "name": "Jellyfish Kite", "description": "Ethereal tentacles flow like underwater dreams", "price": 6.99, "category": "kite", "rarity": "epic", "image_url": "kite_jellyfish", "unlock_level": 6},
+        {"character_id": "storm_kite", "name": "Storm Kite", "description": "Calm within the tempest, beautiful in its power", "price": 6.99, "category": "kite", "rarity": "epic", "image_url": "kite_storm", "unlock_level": 7},
+        {"character_id": "eagle_kite", "name": "Eagle Kite", "description": "Majestic and free, soaring above all", "price": 6.99, "category": "kite", "rarity": "epic", "image_url": "kite_eagle", "unlock_level": 7},
+        
+        # Legendary Kites (Level 8+)
+        {"character_id": "phoenix_kite", "name": "Phoenix Kite", "description": "Reborn with each sunrise, eternally radiant", "price": 9.99, "category": "kite", "rarity": "legendary", "image_url": "kite_phoenix", "unlock_level": 8},
+        {"character_id": "black_gold_kite", "name": "Black & Gold Luxury Kite", "description": "Elegant sophistication against any sky", "price": 9.99, "category": "kite", "rarity": "legendary", "image_url": "kite_luxury", "unlock_level": 8},
+        {"character_id": "neon_cyber_kite", "name": "Neon Cyber Kite", "description": "A glimpse into dreamy digital horizons", "price": 11.99, "category": "kite", "rarity": "legendary", "image_url": "kite_cyber", "unlock_level": 10},
+        {"character_id": "aurora_kite", "name": "Aurora Kite", "description": "Dancing lights of the northern sky", "price": 12.99, "category": "kite", "rarity": "legendary", "image_url": "kite_aurora", "unlock_level": 12},
+        
+        # ========== COMPANIONS ==========
+        # Common Companions (Level 2-3)
+        {"character_id": "fox_companion", "name": "Little Fox", "description": "A curious fox that follows your kite", "price": 2.99, "category": "companion", "rarity": "common", "image_url": "companion_fox", "unlock_level": 2},
+        {"character_id": "owl_companion", "name": "Night Owl", "description": "A wise owl companion for evening adventures", "price": 2.99, "category": "companion", "rarity": "common", "image_url": "companion_owl", "unlock_level": 2},
+        {"character_id": "black_cat", "name": "Black Cat", "description": "A mysterious feline friend bringing good luck", "price": 2.99, "category": "companion", "rarity": "common", "image_url": "companion_cat", "unlock_level": 3},
+        {"character_id": "corgi_aviator", "name": "Aviator Corgi", "description": "A fluffy pilot ready for sky adventures", "price": 3.49, "category": "companion", "rarity": "common", "image_url": "companion_corgi", "unlock_level": 3},
+        
+        # Rare Companions (Level 4-5)
+        {"character_id": "red_panda", "name": "Red Panda", "description": "A gentle red panda napping on the breeze", "price": 4.49, "category": "companion", "rarity": "rare", "image_url": "companion_panda", "unlock_level": 4},
+        {"character_id": "snow_fox", "name": "Snow Fox", "description": "An arctic beauty with eyes like winter stars", "price": 4.99, "category": "companion", "rarity": "rare", "image_url": "companion_snowfox", "unlock_level": 5},
+        {"character_id": "raven_companion", "name": "Raven", "description": "A mystical raven that speaks in riddles", "price": 4.99, "category": "companion", "rarity": "rare", "image_url": "companion_raven", "unlock_level": 5},
+        
+        # Epic Companions (Level 6-7)
+        {"character_id": "firefly_swarm", "name": "Firefly Swarm", "description": "Dancing lights that follow your journey", "price": 5.99, "category": "companion", "rarity": "epic", "image_url": "companion_fireflies", "unlock_level": 6},
+        {"character_id": "jellyfish_creature", "name": "Floating Jellyfish", "description": "An ethereal creature from dreamy depths", "price": 6.49, "category": "companion", "rarity": "epic", "image_url": "companion_jellyfish", "unlock_level": 7},
+        
+        # Legendary Companions (Level 8+)
+        {"character_id": "tiny_dragon", "name": "Tiny Dragon", "description": "A small dragon with a big heart", "price": 8.99, "category": "companion", "rarity": "legendary", "image_url": "companion_dragon", "unlock_level": 8},
+        {"character_id": "spirit_deer", "name": "Spirit Deer", "description": "A celestial deer made of stardust", "price": 9.99, "category": "companion", "rarity": "legendary", "image_url": "companion_deer", "unlock_level": 10},
+        
+        # ========== SKY THEMES ==========
+        # Free starter
+        {"character_id": "dawn", "name": "Dawn Sky", "description": "Soft morning light breaking through", "price": 0, "category": "sky_theme", "rarity": "common", "image_url": "sky_dawn", "unlock_level": 0},
+        
+        # Common Sky Themes
+        {"character_id": "clear_day", "name": "Clear Day", "description": "Bright blue skies with gentle clouds", "price": 1.99, "category": "sky_theme", "rarity": "common", "image_url": "sky_day", "unlock_level": 2},
+        {"character_id": "sunset_glow", "name": "Sunset Glow", "description": "Warm oranges and pinks of evening", "price": 2.49, "category": "sky_theme", "rarity": "common", "image_url": "sky_sunset", "unlock_level": 3},
+        
+        # Rare Sky Themes
+        {"character_id": "twilight", "name": "Twilight", "description": "The magical hour between day and night", "price": 3.49, "category": "sky_theme", "rarity": "rare", "image_url": "sky_twilight", "unlock_level": 4},
+        {"character_id": "cloudy_dreams", "name": "Cloudy Dreams", "description": "Soft, dreamy clouds on a gentle day", "price": 3.49, "category": "sky_theme", "rarity": "rare", "image_url": "sky_cloudy", "unlock_level": 4},
+        {"character_id": "golden_hour", "name": "Golden Hour", "description": "Everything glows with warm, soft light", "price": 3.99, "category": "sky_theme", "rarity": "rare", "image_url": "sky_golden", "unlock_level": 5},
+        
+        # Epic Sky Themes
+        {"character_id": "starry_night", "name": "Starry Night", "description": "A canvas of twinkling stars", "price": 4.99, "category": "sky_theme", "rarity": "epic", "image_url": "sky_stars", "unlock_level": 6},
+        {"character_id": "moonlit", "name": "Moonlit", "description": "Silver moonlight illuminates the world", "price": 5.49, "category": "sky_theme", "rarity": "epic", "image_url": "sky_moon", "unlock_level": 7},
+        {"character_id": "gentle_rain", "name": "Gentle Rain", "description": "Soft rain with distant rolling clouds", "price": 5.49, "category": "sky_theme", "rarity": "epic", "image_url": "sky_rain", "unlock_level": 7},
+        
+        # Legendary Sky Themes
+        {"character_id": "aurora_borealis", "name": "Aurora Borealis", "description": "Northern lights dance across the heavens", "price": 7.99, "category": "sky_theme", "rarity": "legendary", "image_url": "sky_aurora", "unlock_level": 9},
+        {"character_id": "celestial_night", "name": "Celestial Night", "description": "Deep space with nebulas and distant galaxies", "price": 8.99, "category": "sky_theme", "rarity": "legendary", "image_url": "sky_celestial", "unlock_level": 10},
+        {"character_id": "cherry_blossom_sky", "name": "Cherry Blossom Sky", "description": "Petals drift through a pink-hued sky", "price": 8.99, "category": "sky_theme", "rarity": "legendary", "image_url": "sky_sakura", "unlock_level": 11},
     ]
     
     for c in characters:

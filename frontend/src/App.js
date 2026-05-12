@@ -14,6 +14,9 @@ import { ShopPage } from "./pages/Shop";
 import { LeaderboardPage } from "./pages/Leaderboard";
 import { ProfilePage } from "./pages/Profile";
 
+// Contexts
+import { AudioProvider } from "./contexts/AudioContext";
+
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 export const API = `${BACKEND_URL}/api`;
 
@@ -233,9 +236,11 @@ function App() {
     <div className="App">
       <Toaster position="top-center" richColors />
       <BrowserRouter>
-        <AuthProvider>
-          <AppRouter />
-        </AuthProvider>
+        <AudioProvider>
+          <AuthProvider>
+            <AppRouter />
+          </AuthProvider>
+        </AudioProvider>
       </BrowserRouter>
     </div>
   );

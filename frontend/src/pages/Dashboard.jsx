@@ -4,10 +4,12 @@ import { Button } from "../components/ui/button";
 import { Progress } from "../components/ui/progress";
 import { useAuth, API } from "../App";
 import { Play, Trophy, ShoppingBag, User, LogOut, Zap, Target, Star, Gift, Flame } from "lucide-react";
-import { KiteCharacter } from "../components/KiteCharacter";
+import { KiteCharacter, CompanionCharacter } from "../components/KiteCharacter";
 import { useState, useEffect } from "react";
 import axios from "axios";
 import { toast } from "sonner";
+import { AtmosphericBackground } from "../components/Atmosphere";
+import { AudioControl } from "../components/AudioControl";
 
 export default function DashboardPage() {
   const navigate = useNavigate();
@@ -55,12 +57,15 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="min-h-screen sky-gradient" data-testid="dashboard-page">
+    <div className="min-h-screen relative" data-testid="dashboard-page">
+      <AtmosphericBackground theme={user?.current_sky_theme || 'dawn'} />
+      
       {/* Header */}
-      <header className="bg-white/80 backdrop-blur-md border-b border-white/50 sticky top-0 z-50">
+      <header className="bg-white/70 backdrop-blur-md border-b border-white/50 sticky top-0 z-50 relative">
         <div className="container mx-auto px-4 py-3 flex items-center justify-between">
           <h1 className="text-2xl font-bold text-sky-600">Kite</h1>
           <nav className="flex items-center gap-2">
+            <AudioControl minimal />
             <Button
               variant="ghost"
               size="sm"
@@ -102,7 +107,7 @@ export default function DashboardPage() {
       </header>
 
       {/* Main Content */}
-      <main className="container mx-auto px-4 py-8">
+      <main className="container mx-auto px-4 py-8 relative z-10">
         {/* Welcome Section */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -122,7 +127,7 @@ export default function DashboardPage() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             className="max-w-2xl mx-auto mb-6"
           >
-            <div className="glass-card p-4 bg-gradient-to-r from-amber-50 to-orange-50 border-amber-200 flex items-center justify-between gap-4">
+            <div className="glass-card p-4 bg-gradient-to-r from-amber-50/90 to-orange-50/90 border-amber-200 flex items-center justify-between gap-4">
               <div className="flex items-center gap-3">
                 <motion.div
                   animate={{ rotate: [0, -10, 10, 0], scale: [1, 1.1, 1] }}
@@ -154,7 +159,7 @@ export default function DashboardPage() {
             animate={{ opacity: 1 }}
             className="flex justify-center mb-4"
           >
-            <div className="inline-flex items-center gap-2 px-4 py-2 bg-orange-100 rounded-full">
+            <div className="inline-flex items-center gap-2 px-4 py-2 bg-orange-100/80 backdrop-blur-sm rounded-full">
               <Flame className="w-5 h-5 text-orange-500" />
               <span className="text-orange-700 font-medium">
                 {dailyReward?.current_streak || user?.login_streak || 0} day streak
@@ -171,7 +176,12 @@ export default function DashboardPage() {
             transition={{ delay: 0.1 }}
             className="glass-card p-8 flex flex-col items-center"
           >
-            <KiteCharacter characterId={user?.current_character || 'basic_kite'} size="large" />
+            <div className="flex items-end gap-4">
+              <KiteCharacter characterId={user?.current_character || 'basic_kite'} size="large" />
+              {user?.current_companion && (
+                <CompanionCharacter companionId={user.current_companion} size="medium" />
+              )}
+            </div>
             <p className="mt-4 text-sky-700 font-medium capitalize">
               {user?.current_character?.replace('_', ' ') || 'Basic Kite'}
             </p>
