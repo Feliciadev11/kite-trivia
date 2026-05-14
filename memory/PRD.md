@@ -64,7 +64,7 @@ Build a trivia app called Kite with:
 - Expanded marketplace: 20 kites, 11 companions, 12 sky themes (rarity tiers)
 - 220 total questions across 15 categories
 
-### v1.3 — Depth & Calm Settings (Feb 2026 — current)
+### v1.3 — Depth & Calm Settings (Feb 2026)
 - **505 trivia questions** across 12 categories (animals, nature, travel, art, science, pop_culture, history, whimsical, general, space, music, movies)
 - Backend refactor: inline 230-line seed list extracted to `/app/backend/questions_db.py`; `seed_questions()` is now 6 lines
 - **New Settings page** (`/settings`) with:
@@ -76,6 +76,16 @@ Build a trivia app called Kite with:
 - **Polished Play feedback**: emerald glow on correct answer, amber tone on incorrect (no harsh red/green)
 - LocalStorage persistence: `kite_audio_isPlaying`, `kite_audio_volume`, `kite_audio_track`, `kite_audio_sfx`
 - Dashboard nav now has gear icon → Settings
+
+### v1.4 — Forgot Password Flow (Feb 2026 — current)
+- "Forgot your password?" link added to the Login (home) screen
+- New `/forgot-password` 2-step page (calm sky aesthetic, glass card):
+  - Step 1: enter email → backend generates a 6-digit code
+  - Step 2: code is displayed in a gradient card with copy button → user enters code + new password
+- Backend endpoints `POST /api/auth/forgot-password` and `POST /api/auth/reset-password`
+- Security: codes bcrypt-hashed at rest, single-use, 15-min expiry, max 3 active codes per email, generic responses on unknown email (no enumeration), all sessions invalidated on successful reset
+- Email casing normalized to lowercase on register / login / OAuth session so reset works regardless of input casing
+- 23/23 backend pytest pass; full frontend E2E pass; aesthetic remains calm and dreamy
 
 ## Database Collections
 - `users`: accounts + game stats + ownership

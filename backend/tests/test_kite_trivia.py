@@ -56,7 +56,8 @@ def test_register_and_me(session_user):
 
     me = s.get(f"{API}/auth/me")
     assert me.status_code == 200
-    assert me.json().get("email") == payload["email"]
+    # Backend normalizes email to lowercase on register
+    assert me.json().get("email") == payload["email"].lower()
 
 
 def test_login_existing(client, session_user):
@@ -69,7 +70,7 @@ def test_login_existing(client, session_user):
     assert r.status_code == 200, r.text
     me = s.get(f"{API}/auth/me")
     assert me.status_code == 200
-    assert me.json().get("email") == session_user["email"]
+    assert me.json().get("email") == session_user["email"].lower()
 
 
 def test_logout(client):

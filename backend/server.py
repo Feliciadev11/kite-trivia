@@ -167,8 +167,10 @@ def verify_password(password: str, hashed: str) -> bool:
 
 @api_router.post("/auth/register")
 async def register(user_data: UserCreate, response: Response):
+    # Normalize email to lowercase to keep auth lookups consistent across the app
+    normalized_email = user_data.email.lower().strip()
     # Check if user exists
-    existing = await db.users.find_one({"email": user_data.email}, {"_id": 0})
+    existing = await db.users.find_one({"email": normalized_email}, {"_id": 0})
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
     
@@ -177,7 +179,7 @@ async def register(user_data: UserCreate, response: Response):
     
     user_doc = {
         "user_id": user_id,
-        "email": user_data.email,
+        "email": normalized_email,
         "name": user_data.name,
         "password_hash": hash_password(user_data.password),
         "picture": None,
@@ -229,7 +231,8 @@ async def register(user_data: UserCreate, response: Response):
 
 @api_router.post("/auth/login")
 async def login(credentials: UserLogin, response: Response):
-    user_doc = await db.users.find_one({"email": credentials.email}, {"_id": 0})
+    normalized_email = credentials.email.lower().strip()
+    user_doc = await db.users.find_one({"email": normalized_email}, {"_id": 0})
     if not user_doc:
         raise HTTPException(status_code=401, detail="Invalid credentials")
     
@@ -292,6 +295,10 @@ async def exchange_session(request: Request, response: Response):
     email = auth_data.get("email")
     name = auth_data.get("name")
     picture = auth_data.get("picture")
+
+    # Normalize email for consistent lookups
+    if email:
+        email = email.lower().strip()
     
     now = datetime.now(timezone.utc)
     
