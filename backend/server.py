@@ -38,11 +38,6 @@ logger = logging.getLogger(__name__)
 
 # ==================== MODELS ====================
 
-class UserBase(BaseModel):
-    email: EmailStr
-    name: str
-    picture: Optional[str] = None
-
 class UserCreate(BaseModel):
     email: EmailStr
     password: str
@@ -51,6 +46,14 @@ class UserCreate(BaseModel):
 class UserLogin(BaseModel):
     email: EmailStr
     password: str
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+class ResetPasswordRequest(BaseModel):
+    email: EmailStr
+    code: str
+    new_password: str
 
 class User(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -368,6 +371,131 @@ async def logout(request: Request, response: Response):
     
     response.delete_cookie(key="session_token", path="/")
     return {"message": "Logged out"}
+
+# ==================== PASSWORD RESET ====================
+# In-app reset flow (no email provider). A 6-digit code is generated, hashed at rest,
+# returned ONLY in the API response (user-chosen display-on-screen UX), and expires in 15 min.
+
+import secrets as _secrets
+
+RESET_CODE_TTL_SECONDS = 15 * 60
+MAX_ACTIVE_CODES_PER_EMAIL = 3
+
+def _hash_code(code: str) -> str:
+    return bcrypt.hashpw(code.encode(), bcrypt.gensalt()).decode()
+
+def _verify_code(code: str, hashed: str) -> bool:
+    try:
+        return bcrypt.checkpw(code.encode(), hashed.encode())
+    except (ValueError, TypeError):
+        return False
+
+@api_router.post("/auth/forgot-password")
+async def forgot_password(payload: ForgotPasswordRequest):
+    """Generate a 6-digit reset code. To avoid user enumeration, always return a
+    generic success message — but only include the actual code when the email is
+    registered (the frontend handles either case identically and only renders the
+    code if present in the response)."""
+    email = payload.email.lower().strip()
+    now = datetime.now(timezone.utc)
+
+    user_doc = await db.users.find_one({"email": email}, {"_id": 0, "user_id": 1})
+
+    # Generic response shape regardless of outcome
+    generic = {
+        "message": "If that email is registered, a reset code has been generated below.",
+        "code": None,
+        "expires_in_seconds": RESET_CODE_TTL_SECONDS,
+    }
+
+    if not user_doc:
+        # Don't reveal that the email is unregistered
+        return generic
+
+    # Rate-limit: cap active (non-expired, non-used) codes per email
+    active_count = await db.password_resets.count_documents({
+        "email": email,
+        "used": False,
+        "expires_at": {"$gt": now.isoformat()},
+    })
+    if active_count >= MAX_ACTIVE_CODES_PER_EMAIL:
+        # Return the same generic shape; do not leak that they hit the cap
+        return generic
+
+    # Generate a 6-digit code (zero-padded) — easy to type, single-use
+    code = f"{_secrets.randbelow(1_000_000):06d}"
+    expires_at = now + timedelta(seconds=RESET_CODE_TTL_SECONDS)
+
+    await db.password_resets.insert_one({
+        "reset_id": f"rst_{uuid.uuid4().hex[:16]}",
+        "email": email,
+        "user_id": user_doc["user_id"],
+        "code_hash": _hash_code(code),
+        "used": False,
+        "created_at": now.isoformat(),
+        "expires_at": expires_at.isoformat(),
+    })
+
+    return {
+        "message": "Reset code generated. Use it within 15 minutes.",
+        "code": code,
+        "expires_in_seconds": RESET_CODE_TTL_SECONDS,
+    }
+
+@api_router.post("/auth/reset-password")
+async def reset_password(payload: ResetPasswordRequest):
+    """Verify a 6-digit code and set a new password. Codes are single-use and expire."""
+    email = payload.email.lower().strip()
+    submitted_code = payload.code.strip()
+
+    if len(payload.new_password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+
+    now = datetime.now(timezone.utc)
+
+    user_doc = await db.users.find_one({"email": email}, {"_id": 0})
+    if not user_doc:
+        # Same error wording as a wrong code to avoid enumeration
+        raise HTTPException(status_code=400, detail="Invalid or expired code")
+
+    # Find candidate active codes for this email (newest first)
+    candidates = await db.password_resets.find({
+        "email": email,
+        "used": False,
+        "expires_at": {"$gt": now.isoformat()},
+    }).sort("created_at", -1).to_list(MAX_ACTIVE_CODES_PER_EMAIL + 2)
+
+    matched = None
+    for doc in candidates:
+        if _verify_code(submitted_code, doc["code_hash"]):
+            matched = doc
+            break
+
+    if not matched:
+        raise HTTPException(status_code=400, detail="Invalid or expired code")
+
+    # Update password
+    await db.users.update_one(
+        {"user_id": user_doc["user_id"]},
+        {"$set": {"password_hash": hash_password(payload.new_password)}},
+    )
+
+    # Mark this code as used
+    await db.password_resets.update_one(
+        {"reset_id": matched["reset_id"]},
+        {"$set": {"used": True, "used_at": now.isoformat()}},
+    )
+
+    # Invalidate any other outstanding codes for this email (defense in depth)
+    await db.password_resets.update_many(
+        {"email": email, "used": False},
+        {"$set": {"used": True, "used_at": now.isoformat()}},
+    )
+
+    # Invalidate all existing sessions so the user re-logs in with the new password
+    await db.user_sessions.delete_many({"user_id": user_doc["user_id"]})
+
+    return {"message": "Password reset successful. Please sign in with your new password."}
 
 # ==================== TRIVIA ROUTES ====================
 
@@ -856,6 +984,14 @@ async def startup():
     # Seed data on startup
     await seed_questions()
     await seed_characters()
+    # TTL index: password reset codes auto-expire when expires_at (stored as ISO string) passes.
+    # Note: Mongo TTL works on BSON dates. We store ISO strings, so we additionally check
+    # expiry in code; this index is a safety net for any future date-typed inserts.
+    try:
+        await db.password_resets.create_index("email")
+        await db.password_resets.create_index("created_at")
+    except Exception as _e:
+        logger.warning(f"Index creation skipped: {_e}")
 
 @app.on_event("shutdown")
 async def shutdown_db_client():

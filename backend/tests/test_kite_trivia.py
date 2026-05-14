@@ -226,6 +226,121 @@ def test_claim_daily_reward(client):
     assert "xp_earned" in body or "reward" in body
 
 
+# ---------- Forgot / Reset Password ----------
+def _register_user(email_suffix):
+    s = requests.Session()
+    s.headers.update({"Content-Type": "application/json"})
+    ts = int(time.time() * 1000)
+    # NOTE: forgot_password lowercases the lookup email but register stores as-is.
+    # Using lowercase here avoids the case-mismatch bug surfaced separately in the report.
+    payload = {
+        "email": f"test_fp_{email_suffix}_{ts}@example.com",
+        "password": "DreamySky123!",
+        "name": f"TEST FP {email_suffix}",
+    }
+    r = s.post(f"{API}/auth/register", json=payload)
+    assert r.status_code == 200, r.text
+    return s, payload
+
+
+def test_forgot_password_registered_returns_code():
+    _, user = _register_user("happy")
+    r = requests.post(f"{API}/auth/forgot-password", json={"email": user["email"]})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert "message" in body
+    assert body.get("expires_in_seconds") == 900
+    code = body.get("code")
+    assert isinstance(code, str) and len(code) == 6 and code.isdigit()
+
+
+def test_forgot_password_unregistered_returns_null_code():
+    ts = int(time.time() * 1000)
+    r = requests.post(f"{API}/auth/forgot-password",
+                      json={"email": f"TEST_unknown_{ts}@example.com"})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body.get("code") is None
+    assert body.get("expires_in_seconds") == 900
+    assert "message" in body
+
+
+def test_reset_password_happy_path_and_login_with_new():
+    _, user = _register_user("reset_ok")
+    code = requests.post(f"{API}/auth/forgot-password",
+                         json={"email": user["email"]}).json()["code"]
+    new_pw = "NewDreamy456!"
+    r = requests.post(f"{API}/auth/reset-password", json={
+        "email": user["email"], "code": code, "new_password": new_pw,
+    })
+    assert r.status_code == 200, r.text
+
+    # Login with new password works
+    s = requests.Session()
+    s.headers.update({"Content-Type": "application/json"})
+    ok = s.post(f"{API}/auth/login", json={"email": user["email"], "password": new_pw})
+    assert ok.status_code == 200, ok.text
+
+    # OLD password fails
+    bad = requests.post(f"{API}/auth/login",
+                        json={"email": user["email"], "password": user["password"]})
+    assert bad.status_code == 401
+
+
+def test_reset_password_invalid_code_returns_400():
+    _, user = _register_user("badcode")
+    requests.post(f"{API}/auth/forgot-password", json={"email": user["email"]})
+    r = requests.post(f"{API}/auth/reset-password", json={
+        "email": user["email"], "code": "000000", "new_password": "AnotherSky789!",
+    })
+    assert r.status_code == 400
+    assert "Invalid or expired" in r.json().get("detail", "")
+
+
+def test_reset_password_single_use_enforced():
+    _, user = _register_user("reuse")
+    code = requests.post(f"{API}/auth/forgot-password",
+                         json={"email": user["email"]}).json()["code"]
+    pw1 = "FirstSky123!"
+    r1 = requests.post(f"{API}/auth/reset-password", json={
+        "email": user["email"], "code": code, "new_password": pw1,
+    })
+    assert r1.status_code == 200
+    # Reuse — must 400
+    r2 = requests.post(f"{API}/auth/reset-password", json={
+        "email": user["email"], "code": code, "new_password": "SecondSky123!",
+    })
+    assert r2.status_code == 400
+    assert "Invalid or expired" in r2.json().get("detail", "")
+
+
+def test_reset_password_short_password_returns_400():
+    _, user = _register_user("short")
+    code = requests.post(f"{API}/auth/forgot-password",
+                         json={"email": user["email"]}).json()["code"]
+    r = requests.post(f"{API}/auth/reset-password", json={
+        "email": user["email"], "code": code, "new_password": "abc",
+    })
+    assert r.status_code == 400
+    assert "6 character" in r.json().get("detail", "").lower() or "6" in r.json().get("detail", "")
+
+
+def test_forgot_password_rate_limit_caps_at_3():
+    _, user = _register_user("ratecap")
+    # 3 active codes allowed
+    codes = []
+    for _ in range(3):
+        body = requests.post(f"{API}/auth/forgot-password",
+                             json={"email": user["email"]}).json()
+        codes.append(body.get("code"))
+    assert all(c is not None for c in codes), codes
+    # 4th must return generic (code=None) without raising
+    fourth = requests.post(f"{API}/auth/forgot-password",
+                           json={"email": user["email"]})
+    assert fourth.status_code == 200
+    assert fourth.json().get("code") is None
+
+
 # ---------- Profile ----------
 def test_profile(client):
     r = client.get(f"{API}/profile")

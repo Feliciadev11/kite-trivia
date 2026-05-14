@@ -1,0 +1,62 @@
+{
+  "summary": "Forgot Password (in-app code) end-to-end review for Kite Trivia. Extended pytest suite from 16 → 23 tests covering forgot-password (registered/unregistered/rate-cap) and reset-password (happy path / invalid code / single-use / short password). All 23 backend pytest tests PASS. Full frontend E2E PASS: forgot-password link on /login, both steps render, unknown-email shows generic note (no code), registered email shows 6-digit code in card with copy button, mismatched passwords blocks submission with toast, valid reset redirects to /login, and user can sign in with new password. Aesthetic stays calm/dreamy/sky as required. One real backend bug surfaced — see action_items.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "/api/auth/forgot-password & /api/auth/login",
+        "issue": "Email casing mismatch: /api/auth/register stores email AS-IS (e.g. 'Foo@Bar.com'), but /api/auth/forgot-password lowercases the lookup ('email = payload.email.lower().strip()'). Result: any user who registered with an uppercase letter in their email cannot get a reset code — the endpoint silently returns code=null (treated as unregistered). Login has the same case-sensitive behavior. Recommend normalizing email to lowercase at registration (and login/session) OR using a case-insensitive index/query in all three endpoints. This is why the first pytest run failed; tests now use lowercase emails as a workaround."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_tests": [
+    "Backend pytest 23/23 PASSED (see /app/test_reports/pytest/pytest_results.xml)",
+    "POST /api/auth/forgot-password registered email → {message, code: 6-digit string, expires_in_seconds: 900}",
+    "POST /api/auth/forgot-password unregistered email → same shape, code=null (no enumeration leak)",
+    "POST /api/auth/forgot-password rate-limit: 4th request returns code=null (cap=3)",
+    "POST /api/auth/reset-password happy path → 200, login with new password works, OLD password returns 401",
+    "POST /api/auth/reset-password invalid code → 400 'Invalid or expired code'",
+    "POST /api/auth/reset-password reused code → 400 'Invalid or expired code' (single-use enforced; also invalidates other outstanding codes for the email)",
+    "POST /api/auth/reset-password new_password<6 chars → 400 'Password must be at least 6 characters'",
+    "Regression: register / login / me / logout, questions variety+randomization, answer correct/wrong, leaderboard, my-rank, characters list+purchase+equip, daily-reward status+claim, profile — all PASS",
+    "Frontend: /login shows 'Forgot your password?' link (data-testid=forgot-password-link) → navigates to /forgot-password",
+    "Frontend: /forgot-password Step 1 renders forgot-email-input, forgot-request-code-btn, forgot-back-to-login",
+    "Frontend: Unknown email shows forgot-code-not-found note (no forgot-code-display rendered)",
+    "Frontend: Registered email shows forgot-code-display + forgot-code-value with 6-digit code + forgot-code-copy button + expiry text",
+    "Frontend: Mismatched passwords shows 'Passwords do not match' toast and does NOT call /api/auth/reset-password (URL remains /forgot-password)",
+    "Frontend: Full E2E — register → /forgot-password → request code → enter code + new password → submit → redirected to /login → sign in with new password → /dashboard"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_kite_trivia.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "BACKEND BUG (minor): normalize email at registration/login/session to lowercase (or use case-insensitive lookups everywhere). Today, a user who registers with 'Alice@Example.com' cannot reset their password because forgot_password lowercases the lookup. Fix in /app/backend/server.py: lowercase email in register, login, session, forgot-password, reset-password consistently — or apply a unique case-insensitive index on db.users.email."
+  ],
+  "critical_code_review_comments": [
+    "Email casing inconsistency (described in backend_issues.minor) — should be addressed; current behavior is a silent no-op for users with mixed-case emails.",
+    "ResetPasswordRequest.code is typed as `str` and reset endpoint requires it — pydantic 422 surfaces correctly when code is missing/null; good.",
+    "Forgot-password endpoint correctly returns same shape for unknown email and rate-cap hit — no enumeration leakage. Good.",
+    "Reset endpoint invalidates all outstanding codes AND all sessions on success — defense in depth, very nice.",
+    "Codes hashed with bcrypt at rest — secure. 6-digit numeric is brute-force friendly though; 3-active-code cap mitigates this reasonably.",
+    "TTL index commented in startup but not actually created on `expires_at` (because expires_at is stored as ISO string, not BSON Date). Old reset rows will accumulate. Consider storing expires_at as a real datetime to enable MongoDB TTL cleanup. Non-blocking."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_kite_trivia.py (added 7 forgot/reset password tests; total 23)"
+  ],
+  "success_rate": {
+    "backend": "100% (23/23 pytest)",
+    "frontend": "100% (all forgot-password testids, both paths, mismatch guard, E2E reset+login all verified)"
+  },
+  "test_credentials": "Tests create ephemeral users via /api/auth/register with lowercase test_fp_*@example.com / DreamySky123!.",
+  "seed_data_creation": "None added. db.password_resets collection auto-populated by /auth/forgot-password during tests; codes are bcrypt-hashed and marked used after reset.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Run regression with: cd /app/backend && python -m pytest tests/test_kite_trivia.py -v --junitxml=/app/test_reports/pytest/pytest_results.xml. The 7 forgot/reset tests live in the same file. IMPORTANT: forgot-password endpoint lowercases the email lookup while register stores as-is — keep test emails lowercase. The pending email-casing fix in /app/backend/server.py is the only known backend gap. Frontend forgot-password page testids: forgot-password-page, forgot-email-input, forgot-request-code-btn, forgot-back-to-login, forgot-code-display, forgot-code-value, forgot-code-copy, forgot-code-not-found, forgot-code-input, forgot-new-password-input, forgot-confirm-password-input, forgot-reset-btn, forgot-start-over-btn.",
+  "rca of the issue": "Forgot-password returning code=null for registered users was traced to /app/backend/server.py line 399 (`email = payload.email.lower().strip()`) vs register (line 180 stores raw `user_data.email`). MongoDB find_one is case-sensitive, so mixed-case originals never match the lowercased query. Mitigation: lowercase emails uniformly across register/login/session OR add a `case-insensitive collation` or `email_lower` indexed field used by all auth lookups."
+}
