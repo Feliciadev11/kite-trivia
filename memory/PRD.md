@@ -45,7 +45,7 @@ Build a trivia app called Kite with:
 | Sound effects (WebAudio chimes) | Working |
 | Settings page (persistent) | Working |
 | Gentle answer-feedback palette | Working |
-| Shop / CashApp purchase | Manual verification |
+| Shop / Stripe Checkout | Working (Apple Pay, Google Pay, Visa, MC) |
 
 ## What's Been Implemented
 
@@ -77,7 +77,7 @@ Build a trivia app called Kite with:
 - LocalStorage persistence: `kite_audio_isPlaying`, `kite_audio_volume`, `kite_audio_track`, `kite_audio_sfx`
 - Dashboard nav now has gear icon → Settings
 
-### v1.4 — Forgot Password Flow (Feb 2026 — current)
+### v1.4 — Forgot Password Flow (Feb 2026)
 - "Forgot your password?" link added to the Login (home) screen
 - New `/forgot-password` 2-step page (calm sky aesthetic, glass card):
   - Step 1: enter email → backend generates a 6-digit code
@@ -86,6 +86,17 @@ Build a trivia app called Kite with:
 - Security: codes bcrypt-hashed at rest, single-use, 15-min expiry, max 3 active codes per email, generic responses on unknown email (no enumeration), all sessions invalidated on successful reset
 - Email casing normalized to lowercase on register / login / OAuth session so reset works regardless of input casing
 - 23/23 backend pytest pass; full frontend E2E pass; aesthetic remains calm and dreamy
+
+### v1.5 — Stripe + Splash + 820 Questions (Feb 2026 — current)
+- **Stripe Checkout** replaces CashApp entirely. Apple Pay, Google Pay, Visa, Mastercard all supported via Stripe hosted checkout. CashApp UI and endpoints fully removed.
+  - New backend endpoints: `POST /api/characters/purchase` (creates Stripe session), `GET /api/payments/checkout/status/{session_id}` (polls + grants idempotently), `POST /api/webhook/stripe`
+  - `payment_transactions` collection tracks every session with `granted` flag for atomic single-grant
+  - Free items still grant directly without going through Stripe
+- **"Tap to Begin Your Sky" splash** — one-time full-screen overlay with floating kite, drifting clouds, and a glowing pill button. Tap starts ambient audio and is remembered via localStorage. Never reappears.
+- **820 unique questions** across 25+ categories (added food, sports, mythology, technology, literature, inventions, geography2, riddles, holidays, math_fun, kid_classics, language, cozy_facts, kite_lore). All `question_id`s deduplicated.
+- **Distinct sky themes** — rewrote `AtmosphericBackground` with signature elements per theme: glowing sun disc (dawn/golden_hour), crescent moon (moonlit), aurora ribbons (aurora_borealis), rain streaks (gentle_rain), falling petals (cherry_blossom_sky), nebula clouds + shooting stars (celestial_night/starry_night). Gradients are stronger and clearly different.
+- **Louder, fuller correct-answer SFX** — peak gain bumped from 0.06 → 0.16; reward chime from 0.06 → 0.18.
+- 28/28 backend pytest pass (5 new Stripe contract tests); full frontend E2E pass
 
 ## Database Collections
 - `users`: accounts + game stats + ownership
