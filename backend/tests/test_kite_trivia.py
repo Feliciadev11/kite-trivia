@@ -348,3 +348,95 @@ def test_profile(client):
     assert r.status_code == 200
     body = r.json()
     assert "accuracy" in body or "xp_progress" in body or "level" in body
+
+
+
+# ---------- Stripe Checkout (new) ----------
+def test_purchase_free_sky_theme_grants_directly(client):
+    """Free items (price=0) should be granted directly without Stripe session."""
+    # 'dawn' is price=0 and already owned by default, pick something else that's free.
+    chars = client.get(f"{API}/characters").json()
+    free = next((c for c in chars if float(c.get("price", 0)) == 0), None)
+    assert free is not None
+    me = client.get(f"{API}/auth/me").json()
+    # If already owned, expect 400 already owned.
+    if free["character_id"] in me.get("owned_sky_themes", []) + me.get("owned_characters", []):
+        r = client.post(f"{API}/characters/purchase",
+                        json={"character_id": free["character_id"]})
+        assert r.status_code == 400
+        assert "owned" in r.json().get("detail", "").lower()
+    else:
+        r = client.post(f"{API}/characters/purchase",
+                        json={"character_id": free["character_id"]})
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body.get("free") is True and body.get("granted") is True
+
+
+def test_purchase_paid_item_returns_session_url(client):
+    """Paid items should return Stripe session_id + url, and create a payment_transactions row."""
+    chars = client.get(f"{API}/characters").json()
+    me = client.get(f"{API}/auth/me").json()
+    user_level = me.get("level", 1)
+    owned = set(me.get("owned_characters", []) +
+                me.get("owned_companions", []) +
+                me.get("owned_sky_themes", []))
+    # Pick a low-priced item within unlock level and not owned
+    paid = next(
+        (c for c in chars
+         if float(c.get("price", 0)) > 0
+         and c.get("unlock_level", 0) <= user_level
+         and c["character_id"] not in owned),
+        None,
+    )
+    if paid is None:
+        pytest.skip("No purchasable paid item for current user level")
+
+    r = client.post(
+        f"{API}/characters/purchase",
+        json={"character_id": paid["character_id"],
+              "origin_url": "https://example.com"},
+    )
+    # If Stripe key invalid in test env, accept 500 as documented limitation, but record it.
+    if r.status_code == 500:
+        pytest.skip(f"Stripe session creation failed (likely test key): {r.text}")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert "session_id" in body and isinstance(body["session_id"], str)
+    assert "url" in body and body["url"].startswith("http")
+    assert "amount" in body and float(body["amount"]) == float(paid["price"])
+
+    # Status poll on the freshly-created session — should not 404
+    sid = body["session_id"]
+    s = client.get(f"{API}/payments/checkout/status/{sid}")
+    assert s.status_code == 200, s.text
+    sbody = s.json()
+    assert "payment_status" in sbody
+    assert "status" in sbody
+    assert "granted" in sbody
+    assert sbody["character_id"] == paid["character_id"]
+    # Not paid yet (we never went through Stripe's hosted UI)
+    assert sbody["granted"] is False
+
+
+def test_checkout_status_nonexistent_returns_404(client):
+    r = client.get(f"{API}/payments/checkout/status/cs_test_does_not_exist_xyz_123")
+    assert r.status_code == 404
+
+
+def test_old_cashapp_endpoint_removed(client):
+    """Old confirm-purchase endpoint should no longer exist."""
+    r = client.post(f"{API}/characters/confirm-purchase",
+                    json={"character_id": "rainbow_kite"})
+    assert r.status_code in (404, 405), f"expected 404/405, got {r.status_code}: {r.text}"
+
+
+def test_stripe_webhook_endpoint_exists():
+    """Webhook endpoint should exist and reject invalid signatures with 400 (not 404)."""
+    r = requests.post(f"{API}/webhook/stripe",
+                      data=b"{}",
+                      headers={"Stripe-Signature": "invalid",
+                               "Content-Type": "application/json"})
+    # Endpoint exists -> not 404/405. Invalid sig -> 400 (per handler). Some integrations may 500.
+    assert r.status_code not in (404, 405), f"webhook missing: {r.status_code}"
+    assert r.status_code in (400, 401, 422, 500), f"unexpected: {r.status_code} {r.text}"

@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect, useCallback } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import axios from "axios";
 import { Button } from "../components/ui/button";
@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { useAuth, API, LoadingKite } from "../App";
 import { toast } from "sonner";
-import { ArrowLeft, Lock, Check, DollarSign, ExternalLink, Sparkles, Wind, Palette, Heart } from "lucide-react";
+import { ArrowLeft, Lock, Check, Sparkles, Wind, Palette, Heart, CreditCard, Loader2, DollarSign } from "lucide-react";
 import { KiteCharacter, CompanionCharacter } from "../components/KiteCharacter";
 import { AtmosphericBackground } from "../components/Atmosphere";
 import { AudioControl } from "../components/AudioControl";
@@ -21,26 +21,82 @@ const RARITY_COLORS = {
 
 export default function ShopPage() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user, refreshUser } = useAuth();
   const [characters, setCharacters] = useState([]);
   const [loading, setLoading] = useState(true);
   const [purchaseDialog, setPurchaseDialog] = useState(false);
   const [purchaseInfo, setPurchaseInfo] = useState(null);
   const [activeTab, setActiveTab] = useState('kites');
+  const [paymentStatus, setPaymentStatus] = useState(null); // 'polling' | 'paid' | 'failed' | null
+
+  const loadCharacters = useCallback(async () => {
+    try {
+      const response = await axios.get(`${API}/characters`, { withCredentials: true });
+      setCharacters(response.data);
+    } catch (error) {
+      toast.error("Failed to load shop items");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    const fetchCharacters = async () => {
+    loadCharacters();
+  }, [loadCharacters]);
+
+  // Stripe polling on return from Checkout
+  useEffect(() => {
+    const sessionId = searchParams.get('session_id');
+    const canceled = searchParams.get('canceled');
+    if (canceled) {
+      toast.info("Payment canceled. Your sky stays as it was.");
+      setSearchParams({}, { replace: true });
+      return;
+    }
+    if (!sessionId) return;
+
+    let attempts = 0;
+    const maxAttempts = 8;
+    const interval = 2000;
+    setPurchaseDialog(true);
+    setPaymentStatus('polling');
+
+    const poll = async () => {
       try {
-        const response = await axios.get(`${API}/characters`, { withCredentials: true });
-        setCharacters(response.data);
-      } catch (error) {
-        toast.error("Failed to load shop items");
-      } finally {
-        setLoading(false);
+        const { data } = await axios.get(`${API}/payments/checkout/status/${sessionId}`, { withCredentials: true });
+        if (data.payment_status === 'paid' || data.granted) {
+          setPaymentStatus('paid');
+          toast.success("Item unlocked — welcome to your new sky!");
+          await refreshUser();
+          await loadCharacters();
+          setTimeout(() => {
+            setPurchaseDialog(false);
+            setPaymentStatus(null);
+            setSearchParams({}, { replace: true });
+          }, 1800);
+          return;
+        }
+        if (data.status === 'expired') {
+          setPaymentStatus('failed');
+          toast.error("Payment session expired. Please try again.");
+          return;
+        }
+        attempts += 1;
+        if (attempts >= maxAttempts) {
+          setPaymentStatus('failed');
+          toast.error("Payment is still processing. Check back in a moment.");
+          return;
+        }
+        setTimeout(poll, interval);
+      } catch (e) {
+        setPaymentStatus('failed');
+        toast.error(e.response?.data?.detail || "Could not verify payment.");
       }
     };
-    fetchCharacters();
-  }, []);
+    poll();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   const handleEquip = async (characterId, type = 'kite') => {
     try {
@@ -57,15 +113,36 @@ export default function ShopPage() {
       toast.error(`Reach level ${character.unlock_level} to unlock this!`);
       return;
     }
+    setPurchaseInfo({ character });
+    setPurchaseDialog(true);
+    setPaymentStatus('polling');
 
     try {
-      const response = await axios.post(`${API}/characters/purchase`, 
-        { character_id: character.character_id },
+      const { data } = await axios.post(
+        `${API}/characters/purchase`,
+        {
+          character_id: character.character_id,
+          origin_url: window.location.origin,
+        },
         { withCredentials: true }
       );
-      setPurchaseInfo(response.data);
-      setPurchaseDialog(true);
+      if (data.free && data.granted) {
+        toast.success("Unlocked!");
+        await refreshUser();
+        await loadCharacters();
+        setPurchaseDialog(false);
+        setPaymentStatus(null);
+        return;
+      }
+      if (data.url) {
+        // Redirect to Stripe Checkout
+        window.location.href = data.url;
+        return;
+      }
+      throw new Error("Could not start checkout");
     } catch (error) {
+      setPurchaseDialog(false);
+      setPaymentStatus(null);
       toast.error(error.response?.data?.detail || "Failed to start purchase");
     }
   };
@@ -271,70 +348,85 @@ export default function ShopPage() {
         </Tabs>
       </main>
 
-      {/* Purchase Dialog */}
-      <Dialog open={purchaseDialog} onOpenChange={setPurchaseDialog}>
-        <DialogContent className="sm:max-w-md">
+      {/* Purchase Dialog — Stripe Checkout status */}
+      <Dialog open={purchaseDialog} onOpenChange={(open) => {
+        if (!open && paymentStatus !== 'polling') {
+          setPurchaseDialog(false);
+          setPaymentStatus(null);
+        }
+      }}>
+        <DialogContent className="sm:max-w-md" data-testid="purchase-dialog">
           <DialogHeader>
-            <DialogTitle className="text-sky-900">Complete Your Purchase</DialogTitle>
+            <DialogTitle className="text-sky-900 flex items-center gap-2">
+              <CreditCard className="w-5 h-5 text-sky-500" />
+              {paymentStatus === 'paid' ? "Your sky is yours" : "Preparing secure checkout"}
+            </DialogTitle>
             <DialogDescription>
-              Send payment via CashApp to unlock this item
+              {paymentStatus === 'paid'
+                ? "We've added this to your collection."
+                : "Apple Pay, Google Pay, Visa, and Mastercard accepted."}
             </DialogDescription>
           </DialogHeader>
-          
-          {purchaseInfo && (
-            <div className="space-y-4 py-4">
-              <div className="flex items-center gap-4 p-4 bg-sky-50 rounded-2xl">
-                {purchaseInfo.character?.category === 'companion' ? (
-                  <CompanionCharacter companionId={purchaseInfo.character?.character_id} size="medium" />
-                ) : purchaseInfo.character?.category === 'sky_theme' ? (
-                  <div className="w-16 h-16 rounded-full bg-gradient-to-br from-sky-200 to-sky-100 flex items-center justify-center">
-                    <Palette className="w-8 h-8 text-sky-500" />
-                  </div>
-                ) : (
-                  <KiteCharacter characterId={purchaseInfo.character?.character_id} size="small" rarity={purchaseInfo.character?.rarity} />
-                )}
-                <div>
-                  <p className="font-semibold text-sky-900">{purchaseInfo.character?.name}</p>
-                  <p className="text-sky-600 text-sm">{purchaseInfo.character?.description}</p>
+
+          {purchaseInfo?.character && (
+            <div className="flex items-center gap-4 p-4 bg-sky-50/70 rounded-2xl my-2">
+              {purchaseInfo.character?.category === 'companion' ? (
+                <CompanionCharacter companionId={purchaseInfo.character?.character_id} size="medium" />
+              ) : purchaseInfo.character?.category === 'sky_theme' ? (
+                <div className="w-16 h-16 rounded-full bg-gradient-to-br from-sky-200 to-violet-200 flex items-center justify-center">
+                  <Palette className="w-8 h-8 text-sky-600" />
                 </div>
-              </div>
-              
-              <div className="bg-green-50 p-4 rounded-2xl text-center">
-                <p className="text-green-700 font-medium mb-2">Send to CashApp:</p>
-                <p className="text-2xl font-bold text-green-800">${purchaseInfo.cashapp_handle}</p>
-                <p className="text-3xl font-bold text-green-900 mt-2">${purchaseInfo.amount?.toFixed(2)}</p>
-              </div>
-              
-              <div className="bg-amber-50 p-4 rounded-2xl">
-                <p className="text-amber-700 text-sm">
-                  <strong>Important:</strong> Include this note with your payment:
-                </p>
-                <p className="font-mono text-amber-900 mt-1 text-sm break-all">
-                  KITE-{purchaseInfo.purchase_id}
-                </p>
+              ) : (
+                <KiteCharacter characterId={purchaseInfo.character?.character_id} size="small" rarity={purchaseInfo.character?.rarity} />
+              )}
+              <div className="flex-1">
+                <p className="font-semibold text-sky-900">{purchaseInfo.character?.name}</p>
+                <p className="text-sky-600 text-sm">{purchaseInfo.character?.description}</p>
+                <p className="text-sky-700 font-medium mt-1">${Number(purchaseInfo.character?.price).toFixed(2)}</p>
               </div>
             </div>
           )}
-          
-          <DialogFooter className="flex gap-2">
-            <Button
-              variant="outline"
-              onClick={() => setPurchaseDialog(false)}
-              className="rounded-full"
-            >
-              Cancel
-            </Button>
-            <Button
-              className="rounded-full bg-green-500 hover:bg-green-600"
-              onClick={() => {
-                window.open(`https://cash.app/$${purchaseInfo?.cashapp_handle}`, '_blank');
-              }}
-              data-testid="open-cashapp-btn"
-            >
-              Open CashApp
-              <ExternalLink className="w-4 h-4 ml-2" />
-            </Button>
-          </DialogFooter>
+
+          <div className="flex items-center justify-center py-6">
+            {paymentStatus === 'polling' && (
+              <div className="flex flex-col items-center gap-3 text-sky-600" data-testid="purchase-status-polling">
+                <Loader2 className="w-8 h-8 animate-spin" />
+                <p className="text-sm">Drifting through the clouds...</p>
+              </div>
+            )}
+            {paymentStatus === 'paid' && (
+              <motion.div
+                initial={{ scale: 0.6, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                className="flex flex-col items-center gap-3 text-emerald-600"
+                data-testid="purchase-status-paid"
+              >
+                <div className="w-12 h-12 rounded-full bg-emerald-100 flex items-center justify-center">
+                  <Check className="w-7 h-7" />
+                </div>
+                <p className="text-sm font-medium">Payment complete</p>
+              </motion.div>
+            )}
+            {paymentStatus === 'failed' && (
+              <div className="flex flex-col items-center gap-3 text-amber-600" data-testid="purchase-status-failed">
+                <Sparkles className="w-8 h-8" />
+                <p className="text-sm">Something didn't go through. Please try again.</p>
+              </div>
+            )}
+          </div>
+
+          {paymentStatus !== 'polling' && (
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => { setPurchaseDialog(false); setPaymentStatus(null); }}
+                className="rounded-full"
+                data-testid="purchase-dialog-close"
+              >
+                Close
+              </Button>
+            </DialogFooter>
+          )}
         </DialogContent>
       </Dialog>
     </div>

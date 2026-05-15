@@ -18,6 +18,7 @@ import { SettingsPage } from "./pages/Settings";
 
 // Contexts
 import { AudioProvider } from "./contexts/AudioContext";
+import SkySplash from "./components/SkySplash";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 export const API = `${BACKEND_URL}/api`;
@@ -245,6 +246,7 @@ function App() {
       <Toaster position="top-center" richColors />
       <BrowserRouter>
         <AudioProvider>
+          <SkySplash />
           <AuthProvider>
             <AppRouter />
           </AuthProvider>

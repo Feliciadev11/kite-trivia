@@ -187,19 +187,19 @@ export const AudioProvider = ({ children }) => {
       };
 
       if (type === 'correct') {
-        // Gentle major triad arpeggio (C5, E5, G5)
-        playNote(523.25, 0, 0.35);
-        playNote(659.25, 0.08, 0.35);
-        playNote(783.99, 0.16, 0.45);
+        // Brighter, fuller major triad arpeggio (C5, E5, G5) — clearly rewarding
+        playNote(523.25, 0, 0.45, 0.16);
+        playNote(659.25, 0.08, 0.45, 0.16);
+        playNote(783.99, 0.16, 0.55, 0.18);
       } else if (type === 'incorrect') {
         // Soft descending minor second (G4 -> F#4) — calm, not alarming
-        playNote(392.00, 0, 0.4, 0.04);
-        playNote(369.99, 0.12, 0.45, 0.04);
+        playNote(392.00, 0, 0.4, 0.05);
+        playNote(369.99, 0.12, 0.45, 0.05);
       } else if (type === 'reward') {
         // Magical chime (E5, A5, B5)
-        playNote(659.25, 0, 0.5);
-        playNote(880.00, 0.1, 0.5);
-        playNote(987.77, 0.22, 0.6);
+        playNote(659.25, 0, 0.55, 0.18);
+        playNote(880.00, 0.1, 0.55, 0.18);
+        playNote(987.77, 0.22, 0.65, 0.20);
       } else if (type === 'click') {
         playNote(880, 0, 0.08, 0.03);
       }

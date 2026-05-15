@@ -115,6 +115,7 @@ class LeaderboardEntry(BaseModel):
 
 class PurchaseRequest(BaseModel):
     character_id: str
+    origin_url: Optional[str] = None
 
 # ==================== AUTH HELPERS ====================
 
@@ -635,18 +636,21 @@ async def equip_character(
 @api_router.post("/characters/purchase")
 async def purchase_character(
     purchase: PurchaseRequest,
+    request: Request,
     current_user: User = Depends(get_current_user)
 ):
-    """Record purchase intent - directs to CashApp"""
+    """Create a Stripe Checkout Session for the requested item."""
+    from emergentintegrations.payments.stripe.checkout import (
+        StripeCheckout, CheckoutSessionRequest,
+    )
+
     character = await db.characters.find_one(
         {"character_id": purchase.character_id},
         {"_id": 0}
     )
-    
     if not character:
         raise HTTPException(status_code=404, detail="Character not found")
-    
-    # Check which list to check based on category
+
     category = character.get("category", "kite")
     if category == "companion":
         owned_list = current_user.owned_companions
@@ -654,75 +658,194 @@ async def purchase_character(
         owned_list = current_user.owned_sky_themes
     else:
         owned_list = current_user.owned_characters
-    
+
     if purchase.character_id in owned_list:
         raise HTTPException(status_code=400, detail="Already owned")
-    
-    # Check level requirement
+
     if character.get("unlock_level", 0) > current_user.level:
         raise HTTPException(
             status_code=403,
-            detail=f"Requires level {character['unlock_level']}"
+            detail=f"Requires level {character['unlock_level']}",
         )
-    
-    # Create purchase record
-    purchase_id = f"purchase_{uuid.uuid4().hex[:12]}"
-    purchase_doc = {
-        "purchase_id": purchase_id,
+
+    # Server-side authoritative pricing — never trust frontend
+    price_usd = float(character["price"])
+    if price_usd <= 0:
+        # Free items: grant directly
+        field_map = {"companion": "owned_companions", "sky_theme": "owned_sky_themes"}
+        field = field_map.get(category, "owned_characters")
+        await db.users.update_one(
+            {"user_id": current_user.user_id},
+            {"$addToSet": {field: purchase.character_id}},
+        )
+        return {"free": True, "granted": True, "character_id": purchase.character_id}
+
+    # Build success/cancel URLs from the request origin (provided by frontend)
+    origin = purchase.origin_url or str(request.base_url).rstrip("/")
+    success_url = f"{origin.rstrip('/')}/shop?session_id={{CHECKOUT_SESSION_ID}}"
+    cancel_url = f"{origin.rstrip('/')}/shop?canceled=1"
+
+    api_key = os.environ.get("STRIPE_API_KEY")
+    if not api_key:
+        raise HTTPException(status_code=500, detail="Payments not configured")
+
+    host_url = str(request.base_url)
+    webhook_url = f"{host_url.rstrip('/')}/api/webhook/stripe"
+    stripe_checkout = StripeCheckout(api_key=api_key, webhook_url=webhook_url)
+
+    metadata = {
         "user_id": current_user.user_id,
         "character_id": purchase.character_id,
         "category": category,
-        "price": character["price"],
-        "status": "pending",
-        "created_at": datetime.now(timezone.utc).isoformat()
+        "source": "kite_shop",
     }
-    await db.purchases.insert_one(purchase_doc)
-    
+    checkout_request = CheckoutSessionRequest(
+        amount=price_usd,
+        currency="usd",
+        success_url=success_url,
+        cancel_url=cancel_url,
+        metadata=metadata,
+    )
+    session = await stripe_checkout.create_checkout_session(checkout_request)
+
+    # MANDATORY: store transaction BEFORE redirect
+    now = datetime.now(timezone.utc)
+    await db.payment_transactions.insert_one({
+        "session_id": session.session_id,
+        "user_id": current_user.user_id,
+        "character_id": purchase.character_id,
+        "category": category,
+        "amount": price_usd,
+        "currency": "usd",
+        "payment_status": "initiated",
+        "status": "open",
+        "granted": False,
+        "metadata": metadata,
+        "created_at": now.isoformat(),
+        "updated_at": now.isoformat(),
+    })
+
     return {
-        "purchase_id": purchase_id,
-        "character": character,
-        "cashapp_handle": "fabfeliciaxo",
-        "amount": character["price"],
-        "instructions": f"Send ${character['price']:.2f} to $fabfeliciaxo on CashApp with note: KITE-{purchase_id}"
+        "session_id": session.session_id,
+        "url": session.url,
+        "amount": price_usd,
     }
 
-@api_router.post("/characters/confirm-purchase")
-async def confirm_purchase(
-    data: dict,
-    current_user: User = Depends(get_current_user)
+
+@api_router.get("/payments/checkout/status/{session_id}")
+async def get_checkout_status(
+    session_id: str,
+    request: Request,
+    current_user: User = Depends(get_current_user),
 ):
-    """Confirm a purchase (manual verification by admin in real scenario)"""
-    purchase_id = data.get("purchase_id")
-    
-    purchase = await db.purchases.find_one(
-        {"purchase_id": purchase_id, "user_id": current_user.user_id},
-        {"_id": 0}
+    """Poll Stripe for the latest session status and grant the item once."""
+    from emergentintegrations.payments.stripe.checkout import StripeCheckout
+
+    txn = await db.payment_transactions.find_one(
+        {"session_id": session_id, "user_id": current_user.user_id},
+        {"_id": 0},
     )
-    
-    if not purchase:
-        raise HTTPException(status_code=404, detail="Purchase not found")
-    
-    # Update purchase status
-    await db.purchases.update_one(
-        {"purchase_id": purchase_id},
-        {"$set": {"status": "completed"}}
-    )
-    
-    # Add to appropriate owned list based on category
-    category = purchase.get("category", "kite")
-    if category == "companion":
-        field = "owned_companions"
-    elif category == "sky_theme":
-        field = "owned_sky_themes"
+    if not txn:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+
+    # Already granted — return cached state
+    if txn.get("granted"):
+        return {
+            "payment_status": txn.get("payment_status", "paid"),
+            "status": txn.get("status", "complete"),
+            "granted": True,
+            "character_id": txn["character_id"],
+        }
+
+    api_key = os.environ.get("STRIPE_API_KEY")
+    host_url = str(request.base_url)
+    webhook_url = f"{host_url.rstrip('/')}/api/webhook/stripe"
+    stripe_checkout = StripeCheckout(api_key=api_key, webhook_url=webhook_url)
+    status_response = await stripe_checkout.get_checkout_status(session_id)
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    update = {
+        "payment_status": status_response.payment_status,
+        "status": status_response.status,
+        "updated_at": now_iso,
+    }
+
+    granted = False
+    if status_response.payment_status == "paid" and not txn.get("granted"):
+        # Grant the item idempotently
+        category = txn.get("category", "kite")
+        field_map = {"companion": "owned_companions", "sky_theme": "owned_sky_themes"}
+        field = field_map.get(category, "owned_characters")
+
+        # Atomically mark granted=true and set granted_at
+        result = await db.payment_transactions.update_one(
+            {"session_id": session_id, "granted": {"$ne": True}},
+            {"$set": {**update, "granted": True, "granted_at": now_iso}},
+        )
+        if result.modified_count == 1:
+            await db.users.update_one(
+                {"user_id": current_user.user_id},
+                {"$addToSet": {field: txn["character_id"]}},
+            )
+            granted = True
     else:
-        field = "owned_characters"
-    
-    await db.users.update_one(
-        {"user_id": current_user.user_id},
-        {"$addToSet": {field: purchase["character_id"]}}
-    )
-    
-    return {"message": "Purchase confirmed", "character_id": purchase["character_id"]}
+        await db.payment_transactions.update_one(
+            {"session_id": session_id},
+            {"$set": update},
+        )
+
+    return {
+        "payment_status": status_response.payment_status,
+        "status": status_response.status,
+        "granted": granted or bool(txn.get("granted")),
+        "character_id": txn["character_id"],
+    }
+
+
+@api_router.post("/webhook/stripe")
+async def stripe_webhook(request: Request):
+    """Stripe webhook for redundant payment confirmation (idempotent)."""
+    from emergentintegrations.payments.stripe.checkout import StripeCheckout
+
+    api_key = os.environ.get("STRIPE_API_KEY")
+    host_url = str(request.base_url)
+    webhook_url = f"{host_url.rstrip('/')}/api/webhook/stripe"
+    stripe_checkout = StripeCheckout(api_key=api_key, webhook_url=webhook_url)
+    body = await request.body()
+    sig = request.headers.get("Stripe-Signature")
+    try:
+        evt = await stripe_checkout.handle_webhook(body, sig)
+    except Exception as e:
+        logger.warning(f"Webhook verification failed: {e}")
+        raise HTTPException(status_code=400, detail="Invalid webhook")
+
+    if evt.payment_status == "paid" and evt.session_id:
+        txn = await db.payment_transactions.find_one(
+            {"session_id": evt.session_id}, {"_id": 0}
+        )
+        if txn and not txn.get("granted"):
+            category = txn.get("category", "kite")
+            field_map = {"companion": "owned_companions", "sky_theme": "owned_sky_themes"}
+            field = field_map.get(category, "owned_characters")
+            now_iso = datetime.now(timezone.utc).isoformat()
+            result = await db.payment_transactions.update_one(
+                {"session_id": evt.session_id, "granted": {"$ne": True}},
+                {"$set": {
+                    "payment_status": "paid",
+                    "status": "complete",
+                    "granted": True,
+                    "granted_at": now_iso,
+                    "updated_at": now_iso,
+                }},
+            )
+            if result.modified_count == 1:
+                await db.users.update_one(
+                    {"user_id": txn["user_id"]},
+                    {"$addToSet": {field: txn["character_id"]}},
+                )
+
+    return {"received": True}
+
 
 # ==================== LEADERBOARD ROUTES ====================
 

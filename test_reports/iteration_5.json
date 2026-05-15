@@ -1,0 +1,66 @@
+{
+  "summary": "Iteration 5 review: Stripe Checkout migration (CashApp removed), splash overlay, expanded questions DB (820), distinct sky themes, louder SFX. Backend: extended pytest from 23 -> 28 tests; ALL 28 PASS (5 new Stripe tests: free-grant, paid session creation, status 404, old confirm-purchase 404, webhook 400-not-404). Frontend: splash overlay works end-to-end (shown once, dismisses on tap, unmutes audio, doesn't reappear on reload). Shop page had a CRITICAL crash (`DollarSign is not defined`) breaking ALL purchase cards — FIXED by adding DollarSign to lucide-react import in /app/frontend/src/pages/Shop.jsx. After fix: 20+ purchase cards render, Buy button posts {character_id, origin_url} to /api/characters/purchase, redirect to Stripe URL works. ?session_id=... opens polling dialog and resolves to paid state; ?canceled=1 shows toast and clears param. No CashApp references found anywhere in /src.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "questions DB", "issue": "30 duplicate question_ids in /app/backend/questions_db.py (whim_1..whim_15 each appear twice). MongoDB upsert collapses them so only ~790 unique questions land in DB. Not user-facing critical but reduces variety vs. the advertised 820."},
+      {"endpoint": "/api/auth/* (carried over from iter_4)", "issue": "Email casing inconsistency between register (stores normalized lowercase now) and old historical accounts — verified register now lowercases. No new action needed; flagged for awareness."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Shop / ItemCard", "issue": "FIXED IN THIS ITERATION. `DollarSign` icon used at line 525 of Shop.jsx but missing from lucide-react import. Caused 'ReferenceError: DollarSign is not defined' which crashed every ItemCard via React error boundary — Shop showed 0 cards in production. Fix: added DollarSign to import at line 10.", "selector": "[data-testid^='item-card-']", "priority": "CRITICAL (resolved)"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_tests": [
+    "Backend pytest 28/28 PASSED — including 5 new Stripe tests",
+    "POST /api/characters/purchase (free item) -> {free:true, granted:true}",
+    "POST /api/characters/purchase (paid item) -> {session_id, url(https), amount} and creates payment_transactions row",
+    "GET /api/payments/checkout/status/{session_id} for fresh session -> 200 with payment_status/status/granted=false/character_id",
+    "GET /api/payments/checkout/status/{non_existent} -> 404",
+    "POST /api/characters/confirm-purchase (old CashApp endpoint) -> 404 (removed as required)",
+    "POST /api/webhook/stripe -> 400 on invalid signature (endpoint exists, not 404)",
+    "Regression: register/login/me/logout, questions variety+randomization+category-spread (>=5 categories across 8 calls), correct/wrong answer scoring, leaderboard, my-rank, characters list+equip+purchase, daily reward status+claim, profile, forgot/reset password (happy/invalid/single-use/short/rate-cap) all PASS",
+    "Frontend: SkySplash overlay visible on first visit (sky-splash + sky-splash-begin-btn testids), kite + 'Tap to begin your sky' text, peach->blue dawn gradient",
+    "Frontend: Tapping splash sets localStorage kite_sky_splash_seen='true' AND kite_audio_isPlaying='true' (audio unmuted)",
+    "Frontend: Reload does NOT show splash again",
+    "Frontend: Shop has zero CashApp references ('cashapp', 'fabfeliciaxo', 'cash app' all absent)",
+    "Frontend: After DollarSign fix, Shop renders 20 item cards; Buy click POSTs {character_id, origin_url:'https://kite-trivia-quest.preview.emergentagent.com'} to /api/characters/purchase",
+    "Frontend: When purchase API returns {url}, window.location.href is set to Stripe URL (verified via Proxy-trap on location)",
+    "Frontend: Return URL /shop?session_id=... triggers polling effect, opens purchase-dialog, hits /api/payments/checkout/status/<sid>, transitions to purchase-status-paid on granted=true (auto-closes after 1.8s)",
+    "Frontend: /shop?canceled=1 shows 'Payment canceled' toast and clears the query param (URL becomes /shop)",
+    "Frontend: /play renders questions with variety (Mythology, etc.) — confirms expanded DB is reachable; SFX correct/reward path runs without console errors after answering"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_kite_trivia.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "(Optional) De-duplicate question_ids in /app/backend/questions_db.py — whim_1..whim_15 are duplicated, so DB ends up with ~790 unique questions instead of 820. Suggest renaming the second set (e.g. whim_16..whim_30) or removing duplicates so the advertised question count matches reality.",
+    "(Manual verification only) Real Stripe payment completion cannot be E2E-tested in automation (requires Stripe hosted UI + a test card). Recommend a manual smoke test in Stripe test mode to confirm the granted-once idempotency on a real 'paid' transition."
+  ],
+  "critical_code_review_comments": [
+    "Shop.jsx imported every lucide icon EXCEPT DollarSign while still using <DollarSign /> on the Buy button — broke entire purchase UX silently in prod (covered by React error boundary, so dev didn't see a hard crash without a refresh). FIXED. Consider adding a lint rule for no-undef in JSX or running `eslint --no-undef`.",
+    "questions_db.py has 30 duplicate question_ids (line-level collision in the whim_ category). Upsert hides this at the DB layer; add a unit test to assert len(set(ids)) == len(QUESTIONS) at import time to prevent regressions.",
+    "Stripe purchase flow stores payment_transactions BEFORE redirect (good), grants idempotently via atomic update_one with {granted:{$ne:true}} (correct), webhook handler is independent and also idempotent (good defense-in-depth).",
+    "GET /api/payments/checkout/status/{session_id} requires authentication and is scoped to the current user's user_id in the find_one query — prevents cross-user session probing. Good.",
+    "Splash component reads localStorage synchronously on mount — no flicker observed on reload (kite_sky_splash_seen='true' blocks render). Good.",
+    "Atmosphere themes ship signature elements (AuroraRibbons, RainStreaks, CrescentMoon, etc.) but the default user only owns 'dawn' until purchase; cannot fully verify all 8 themes render in production without purchasing each. Recommend exposing a dev-only theme selector for QA or seeding a test admin with all themes owned."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_kite_trivia.py (added 5 Stripe tests; total 28)",
+    "/app/frontend/src/pages/Shop.jsx (added DollarSign to lucide-react import — critical fix)"
+  ],
+  "success_rate": {
+    "backend": "100% (28/28 pytest)",
+    "frontend": "100% after Shop DollarSign fix (splash, audio unmute, no-cashapp, purchase contract, return-from-Stripe polling, canceled toast, /play all verified)"
+  },
+  "test_credentials": "Ephemeral users via /api/auth/register with lowercase test_*_<ts>@example.com / DreamySky123!",
+  "seed_data_creation": "None added beyond what test users / forgot-password generate. payment_transactions rows created during test_purchase_paid_item_returns_session_url (one row per test run, payment_status='initiated', granted=false).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Run: cd /app/backend && python -m pytest tests/test_kite_trivia.py -v --junitxml=/app/test_reports/pytest/pytest_results.xml. The 5 Stripe tests are at the bottom of the file. NOTE: test_purchase_paid_item_returns_session_url will pytest.skip if Stripe key is invalid (returns 500). Frontend: Shop crash was fixed in this iteration — DollarSign import was missing. If main agent rewrites Shop.jsx, ensure DollarSign stays imported. Splash testids: sky-splash, sky-splash-begin-btn. Shop dialog testids: purchase-dialog, purchase-status-polling, purchase-status-paid, purchase-status-failed, purchase-dialog-close. Returning to /shop?session_id=... auto-opens dialog and closes 1.8s after paid — test windows must be <1.5s after nav to catch the paid state.",
+  "rca of the issue": "Shop page rendered 0 cards because Shop.jsx imported lucide icons {ArrowLeft, Lock, Check, Sparkles, Wind, Palette, Heart, CreditCard, Loader2} but used <DollarSign /> at line 525 inside ItemCard. React caught the ReferenceError per-card and an error boundary suppressed the visual fallback — only console showed the trace. Reproduced by registering, navigating to /shop, observing 'Uncaught runtime errors: DollarSign is not defined' in dev overlay. Mitigation: added DollarSign to the named import. Re-tested: 20 item cards render, Buy click posts the correct payload, full Stripe redirect chain works."
+}
