@@ -24,9 +24,8 @@ export default function PlayPage() {
 
   const fetchQuestions = useCallback(async () => {
     try {
-      const difficulty = Math.min(user?.level || 1, 5);
       const response = await axios.get(`${API}/questions`, {
-        params: { difficulty, limit: 10 },
+        params: { limit: 10 },
         withCredentials: true
       });
       setQuestions(response.data);
@@ -36,7 +35,7 @@ export default function PlayPage() {
     } finally {
       setLoading(false);
     }
-  }, [user?.level]);
+  }, []);
 
   useEffect(() => {
     fetchQuestions();

@@ -507,29 +507,85 @@ async def reset_password(payload: ResetPasswordRequest):
 
 # ==================== TRIVIA ROUTES ====================
 
+# ==================== DIFFICULTY CURVE ====================
+
+def difficulty_mix_for_level(level: int) -> dict:
+    """
+    Return weighted mix of difficulty buckets based on user level.
+    Mix is normalized — values sum to 1.0. Used to compose a 10-question round.
+
+    Curve design:
+      Level 1     → 80% easy (d1), 20% medium (d2), 0% hard (d3)
+      Level 2-3   → 60% d1, 30% d2, 10% d3
+      Level 4-5   → 40% d1, 40% d2, 20% d3
+      Level 6-8   → 20% d1, 40% d2, 40% d3
+      Level 9+    → 10% d1, 30% d2, 60% d3
+    """
+    if level <= 1:
+        return {1: 0.80, 2: 0.20, 3: 0.0}
+    if level <= 3:
+        return {1: 0.60, 2: 0.30, 3: 0.10}
+    if level <= 5:
+        return {1: 0.40, 2: 0.40, 3: 0.20}
+    if level <= 8:
+        return {1: 0.20, 2: 0.40, 3: 0.40}
+    return {1: 0.10, 2: 0.30, 3: 0.60}
+
+
 @api_router.get("/questions", response_model=List[TriviaQuestion])
 async def get_questions(
-    difficulty: int = 1,
     limit: int = 10,
-    current_user: User = Depends(get_current_user)
+    difficulty: Optional[int] = None,  # deprecated/optional override
+    current_user: User = Depends(get_current_user),
 ):
-    """Get randomized trivia questions by difficulty (1-5, 1 is easiest 5th grade level)"""
-    # Get total count for this difficulty
-    total_count = await db.questions.count_documents({"difficulty": {"$lte": difficulty}})
-    
-    # If no questions, seed them
-    if total_count == 0:
+    """Return a level-tuned bag of questions.
+
+    By default the mix is derived from the player's current level via
+    `difficulty_mix_for_level`. Pass `difficulty` to override and lock to a max
+    bucket (used for testing or future hard-mode endpoints)."""
+
+    # Lazy seed
+    total = await db.questions.count_documents({})
+    if total == 0:
         await seed_questions()
-        total_count = await db.questions.count_documents({"difficulty": {"$lte": difficulty}})
-    
-    # Use aggregation with $sample for random selection
-    questions = await db.questions.aggregate([
-        {"$match": {"difficulty": {"$lte": difficulty}}},
-        {"$sample": {"size": min(limit, total_count)}},
-        {"$project": {"_id": 0}}
-    ]).to_list(limit)
-    
-    return questions
+
+    # Override path: legacy behavior — all buckets up to `difficulty`
+    if difficulty is not None:
+        questions = await db.questions.aggregate([
+            {"$match": {"difficulty": {"$lte": difficulty}}},
+            {"$sample": {"size": limit}},
+            {"$project": {"_id": 0}},
+        ]).to_list(limit)
+        return questions
+
+    # Weighted mix based on level
+    mix = difficulty_mix_for_level(current_user.level)
+    bag: list = []
+    for bucket, weight in mix.items():
+        count = round(weight * limit)
+        if count <= 0:
+            continue
+        chunk = await db.questions.aggregate([
+            {"$match": {"difficulty": bucket}},
+            {"$sample": {"size": count}},
+            {"$project": {"_id": 0}},
+        ]).to_list(count)
+        bag.extend(chunk)
+
+    # If rounding under-filled (rare), top up from the easiest bucket
+    if len(bag) < limit:
+        seen_ids = {q["question_id"] for q in bag}
+        fillers = await db.questions.aggregate([
+            {"$match": {"difficulty": 1, "question_id": {"$nin": list(seen_ids)}}},
+            {"$sample": {"size": limit - len(bag)}},
+            {"$project": {"_id": 0}},
+        ]).to_list(limit - len(bag))
+        bag.extend(fillers)
+
+    # Shuffle so buckets are interleaved (not grouped)
+    random.shuffle(bag)
+    return bag[:limit]
+
 
 @api_router.post("/questions/answer")
 async def submit_answer(

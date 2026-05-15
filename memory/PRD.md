@@ -87,7 +87,7 @@ Build a trivia app called Kite with:
 - Email casing normalized to lowercase on register / login / OAuth session so reset works regardless of input casing
 - 23/23 backend pytest pass; full frontend E2E pass; aesthetic remains calm and dreamy
 
-### v1.5 — Stripe + Splash + 820 Questions (Feb 2026 — current)
+### v1.5 — Stripe + Splash + 820 Questions (Feb 2026)
 - **Stripe Checkout** replaces CashApp entirely. Apple Pay, Google Pay, Visa, Mastercard all supported via Stripe hosted checkout. CashApp UI and endpoints fully removed.
   - New backend endpoints: `POST /api/characters/purchase` (creates Stripe session), `GET /api/payments/checkout/status/{session_id}` (polls + grants idempotently), `POST /api/webhook/stripe`
   - `payment_transactions` collection tracks every session with `granted` flag for atomic single-grant
@@ -97,6 +97,17 @@ Build a trivia app called Kite with:
 - **Distinct sky themes** — rewrote `AtmosphericBackground` with signature elements per theme: glowing sun disc (dawn/golden_hour), crescent moon (moonlit), aurora ribbons (aurora_borealis), rain streaks (gentle_rain), falling petals (cherry_blossom_sky), nebula clouds + shooting stars (celestial_night/starry_night). Gradients are stronger and clearly different.
 - **Louder, fuller correct-answer SFX** — peak gain bumped from 0.06 → 0.16; reward chime from 0.06 → 0.18.
 - 28/28 backend pytest pass (5 new Stripe contract tests); full frontend E2E pass
+
+### v1.6 — Difficulty Curve (Feb 2026 — current)
+- New `difficulty_mix_for_level()` shapes each 10-question round into a level-tuned bag:
+  - **Lvl 1** → 80% easy / 20% medium
+  - **Lvl 2-3** → 60% / 30% / 10% hard
+  - **Lvl 4-5** → 40% / 40% / 20%
+  - **Lvl 6-8** → 20% / 40% / 40%
+  - **Lvl 9+** → 10% / 30% / 60%
+- `/api/questions` now derives the mix from the authenticated user's level instead of the legacy `difficulty<=N` filter. The legacy `difficulty` query param still works as an override for tests/future hard-mode.
+- Buckets are sampled separately, padded if rounding under-fills, then shuffled so the round feels naturally varied (not "5 easy then 5 hard").
+- Verified live: Lvl 1 → 8/2/0 consistently; Lvl 5 → 4/4/2; Lvl 9 → 1/3/6.
 
 ## Database Collections
 - `users`: accounts + game stats + ownership
