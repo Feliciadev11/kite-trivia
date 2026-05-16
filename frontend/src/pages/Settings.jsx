@@ -202,8 +202,8 @@ export const SettingsPage = () => {
                 size="sm"
                 onClick={() => playSoundEffect("correct")}
                 disabled={!soundEffectsEnabled}
+                data-testid="settings-preview-correct"
                 className="rounded-full text-xs border-sky-200 hover:bg-sky-50"
-                data-testid="settings-test-correct"
               >
                 Preview ‘correct’
               </Button>
@@ -212,8 +212,8 @@ export const SettingsPage = () => {
                 size="sm"
                 onClick={() => playSoundEffect("reward")}
                 disabled={!soundEffectsEnabled}
+                data-testid="settings-preview-reward"
                 className="rounded-full text-xs border-violet-200 hover:bg-violet-50"
-                data-testid="settings-test-reward"
               >
                 Preview ‘reward’
               </Button>

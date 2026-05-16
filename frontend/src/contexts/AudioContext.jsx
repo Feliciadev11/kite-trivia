@@ -63,7 +63,7 @@ const readStr = (key, def) => {
 };
 
 export const AudioProvider = ({ children }) => {
-  const [isPlaying, setIsPlaying] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(() => readBool(LS_KEYS.isPlaying, false));
   const [volume, setVolume] = useState(() => readNum(LS_KEYS.volume, 0.18));
   const [currentTrack, setCurrentTrack] = useState(() => readStr(LS_KEYS.track, 'serene'));
   const [soundEffectsEnabled, setSoundEffectsEnabled] = useState(() => readBool(LS_KEYS.sfx, true));
