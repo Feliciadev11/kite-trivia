@@ -11,9 +11,9 @@ import { AtmosphericBackground } from "../components/Atmosphere";
 import { useAuth } from "../App";
 
 const TRACK_META = {
-  default: { label: "Serene Sky", description: "Gentle pads drifting through clear blue", icon: Cloud },
-  calm: { label: "Sleepy Clouds", description: "Soft, slow-blooming chimes", icon: Moon },
-  dreamy: { label: "Dream Drift", description: "Floating, hopeful tones", icon: Wind },
+  serene: { label: "Serene Sky", description: "Gentle pads drifting through clear blue", icon: Cloud },
+  sleepy: { label: "Sleepy Clouds", description: "Soft chimes blooming slowly", icon: Moon },
+  dreamy: { label: "Dream Drift", description: "Floating, hopeful, weightless", icon: Wind },
 };
 
 export const SettingsPage = () => {
@@ -97,18 +97,18 @@ export const SettingsPage = () => {
                   Volume
                 </Label>
                 <span className="text-xs text-sky-500 tabular-nums" data-testid="settings-volume-value">
-                  {Math.round((volume / 0.3) * 100)}%
+                  {Math.round(volume * 100)}%
                 </span>
               </div>
               <Slider
                 value={[volume * 100]}
                 onValueChange={([val]) => updateVolume(val / 100)}
-                max={30}
+                max={100}
                 step={1}
                 className="w-full"
                 data-testid="settings-volume-slider"
               />
-              <p className="text-xs text-slate-400">Capped softly — designed to drift in the background.</p>
+              <p className="text-xs text-slate-400">Designed to drift softly in the background.</p>
             </div>
           </Card>
         </motion.div>
@@ -138,7 +138,7 @@ export const SettingsPage = () => {
                   <button
                     key={key}
                     onClick={() => changeTrack(key)}
-                    data-testid={`settings-track-${key}`}
+                    data-testid={`settings-track-${key === 'serene' ? 'default' : key}`}
                     className={`w-full text-left p-4 rounded-2xl border transition-all duration-500 flex items-center gap-3 ${
                       active
                         ? "border-sky-300 bg-gradient-to-br from-sky-50 to-violet-50 shadow-[0_0_24px_rgba(125,200,247,0.25)]"

@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { ArrowLeft, Lock, Check, Sparkles, Wind, Palette, Heart, CreditCard, Loader2, DollarSign } from "lucide-react";
 import { KiteCharacter, CompanionCharacter } from "../components/KiteCharacter";
 import { AtmosphericBackground } from "../components/Atmosphere";
+import { SkyThemeSwatch } from "../components/SkyThemeSwatch";
 import { AudioControl } from "../components/AudioControl";
 
 const RARITY_COLORS = {
@@ -373,9 +374,7 @@ export default function ShopPage() {
               {purchaseInfo.character?.category === 'companion' ? (
                 <CompanionCharacter companionId={purchaseInfo.character?.character_id} size="medium" />
               ) : purchaseInfo.character?.category === 'sky_theme' ? (
-                <div className="w-16 h-16 rounded-full bg-gradient-to-br from-sky-200 to-violet-200 flex items-center justify-center">
-                  <Palette className="w-8 h-8 text-sky-600" />
-                </div>
+                <SkyThemeSwatch themeId={purchaseInfo.character?.character_id} size={64} />
               ) : (
                 <KiteCharacter characterId={purchaseInfo.character?.character_id} size="small" rarity={purchaseInfo.character?.rarity} />
               )}
@@ -475,9 +474,7 @@ const ItemCard = ({ item, owned, equipped, userLevel, onEquip, onPurchase, index
         {type === 'companion' ? (
           <CompanionCharacter companionId={item.character_id} size="medium" />
         ) : type === 'sky_theme' ? (
-          <div className="w-16 h-16 rounded-full bg-gradient-to-br from-sky-200 via-sky-100 to-white flex items-center justify-center shadow-inner">
-            <Palette className="w-8 h-8 text-sky-500" />
-          </div>
+          <SkyThemeSwatch themeId={item.character_id} size={80} />
         ) : (
           <KiteCharacter characterId={item.character_id} size="small" rarity={item.rarity} />
         )}

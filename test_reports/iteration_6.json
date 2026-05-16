@@ -1,0 +1,58 @@
+{
+  "summary": "Iteration 6 verifies two frontend bug fixes: (1) Ambient music synthesised via Web Audio API (no external CDN), (2) Sky theme previews use distinct SkyThemeSwatch components instead of generic Palette icon. Backend regression: pytest 28/28 PASS. Frontend: All 12 sky-swatch testids render in /shop Skies tab with NO Palette icons inside item cards; settings-music-toggle flips localStorage 'kite_audio_isPlaying' true↔false reliably with no audio play() rejection; legacy alias 'settings-track-default' still works and resolves to 'serene'; settings-track-sleepy / settings-track-dreamy both switch tracks (kite_audio_track updates correctly); volume slider shown at 18% (no cap at 30); splash → tap → kite_audio_isPlaying='true' verified. One minor UI sync issue noted: isPlaying state isn't hydrated from localStorage on page mount.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "questions DB", "issue": "(carry-over from iter_5) 30 duplicate question_ids in /app/backend/questions_db.py (whim_1..whim_15 duplicated). Surfaces in browser console as 'Encountered two children with the same key' warnings on /play. Not user-visible breakage."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Settings → Ambient Music switch", "issue": "isPlaying state is `useState(false)` and never hydrates from localStorage.getItem('kite_audio_isPlaying'). Consequence: after a full page reload (or route change via page.goto), the UI switch shows OFF even though the user previously turned it on (and localStorage still reads 'true' until the persistence useEffect overwrites it back to 'false' on mount). The Ambient Track row in Settings still shows a 'Playing' badge on the selected track because that badge is bound to currentTrack === selected, not to isPlaying — so the two indicators contradict each other immediately after a reload. Recommend: `useState(() => readBool(LS_KEYS.isPlaying, false))` AND skip the first persistence write to avoid clobbering. Note: browser autoplay policy will still require a user gesture, so on reload the UI should show 'preference saved but tap to resume' rather than silently flipping back to off.", "selector": "[data-testid='settings-music-toggle']", "priority": "MEDIUM"},
+      {"component": "Settings → Preview buttons", "issue": "User-request expected `settings-preview-correct` and `settings-preview-reward` data-testids on the 'Preview correct' / 'Preview reward' chips. The buttons render and are visually present, but neither testid was found in the DOM. Functionality not validated by selector. Recommend adding the testids.", "selector": "(missing) [data-testid='settings-preview-correct'], [data-testid='settings-preview-reward']", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_tests": [
+    "Backend pytest 28/28 PASS (test_kite_trivia.py — health, auth, questions, scoring, leaderboard, characters, daily reward, forgot/reset password rate limit, Stripe 5/5)",
+    "Frontend: Splash overlay shown on first session; tap sets kite_audio_isPlaying='true' AND triggers togglePlay (no console error, no autoplay rejection)",
+    "Frontend: settings-music-toggle flips localStorage isPlaying: true → false → true across 3 clicks (no exception, AudioContext resumed)",
+    "Frontend: Legacy testid 'settings-track-default' still present and clicking it sets kite_audio_track='serene' (backward-compat preserved)",
+    "Frontend: settings-track-sleepy → kite_audio_track='sleepy'; settings-track-dreamy → kite_audio_track='dreamy' (all 3 tracks switch without error)",
+    "Frontend: Settings shows the labels 'Serene Sky', 'Sleepy Clouds', 'Dream Drift' as required",
+    "Frontend: Volume slider rendered at 18% (no 30-cap)",
+    "Frontend: /shop → Skies tab renders exactly 12 unique sky-swatch testids: dawn, clear_day, sunset_glow, twilight, cloudy_dreams, golden_hour, starry_night, moonlit, gentle_rain, aurora_borealis, celestial_night, cherry_blossom_sky",
+    "Frontend: 0 Palette icons rendered inside any [data-testid^='item-card-'] (cards count: palette_in_cards=0). Palette icons only remain in the equipped-summary header & tab icon, as designed.",
+    "Frontend: Screenshot confirms each card has a visually distinct gradient + signature element (sun, sunset, twilight stars, cloud bars, etc.)",
+    "No new console errors: only pre-existing duplicate-key React warning from questions DB + expected 401 from initial /me prefetch before register completes"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_kite_trivia.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "(MEDIUM) Hydrate isPlaying from localStorage in AudioContext.jsx so the Settings switch reflects the user's previous preference after reload. Suggested: `const [isPlaying, setIsPlaying] = useState(() => readBool(LS_KEYS.isPlaying, false))`. Optionally, on mount, if isPlaying-from-LS is true but AudioContext is not yet resumed (no user gesture), show 'Tap to resume' on the switch — true autoplay still needs a gesture due to browser policy.",
+    "(LOW) Add data-testid='settings-preview-correct' and data-testid='settings-preview-reward' to the 'Preview correct'/'Preview reward' buttons in Settings.jsx (the buttons exist and presumably work; just missing the testids the prompt expected).",
+    "(LOW carry-over) Fix duplicate whim_* question_ids in /app/backend/questions_db.py to silence the 6 'duplicate key' React warnings on /play."
+  ],
+  "critical_code_review_comments": [
+    "AudioContext.jsx: rewrite to Web Audio API is clean — ensureContext() is lazy, resume() is awaited inside togglePlay, master gain fades smoothly, voices are stopped after fade. SFX share the same AudioContext via ensureContext(), preventing the 'too many audio contexts' Chrome warning. Good.",
+    "AudioContext.jsx: BUG — isPlaying state is not initialised from localStorage. Volume, track, sfx are all hydrated; isPlaying isn't. As a result every reload silently disables ambient music until the user toggles it again, AND the persistence useEffect overwrites the localStorage 'true' back to 'false' on mount. Two-line fix.",
+    "SkyThemeSwatch.jsx: 12 distinct presets, each with a gradient + 1–3 motion elements. Aurora/cherry_blossom use framer-motion infinite loops — fine perf-wise at 80px size, but if the Shop renders ALL 12 simultaneously they all animate forever. Consider IntersectionObserver-gating or `prefers-reduced-motion` respect for accessibility.",
+    "Shop.jsx: sky_theme branch correctly uses <SkyThemeSwatch /> in both the card preview (line 477) AND the purchase dialog (line 377). Equipped-summary header still uses generic <Palette /> (line 213) which is fine — it's a section icon, not a per-theme preview. data-testid 'sky-swatch-<id>' covers all 12 character_ids that the backend ships.",
+    "Settings.jsx: TRACK_META keys updated to default/sleepy/dreamy with 'default' aliasing 'serene' for backward compat — verified the legacy testid 'settings-track-default' still resolves and selects the serene track. Good migration.",
+    "Browser autoplay policy: togglePlay correctly calls ensureContext() + resume() AFTER a user gesture (button click). Verified in headless Chrome — AudioContext reaches resumed state without rejection. No mixkit 403 URLs anywhere in /src (grep clean)."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "100% (28/28 pytest)",
+    "frontend": "95% — both reported bugs FIXED and verified. One MEDIUM follow-up (isPlaying state hydration) and one LOW (missing preview-button testids) identified."
+  },
+  "test_credentials": "Ephemeral users via /api/auth/register — pattern TEST_kite_<random>@example.com / DreamySky123!",
+  "seed_data_creation": "None. One ephemeral test user per run via register.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend has no changes this iteration — pytest 28/28 stays green. Frontend Bug Fix 1 (Web Audio API ambient) and Bug Fix 2 (SkyThemeSwatch in Shop) both verified end-to-end. Two minor follow-ups identified (state hydration + preview testids) — main agent can self-test these. Audio playback in headless Chrome cannot make actual sound but AudioContext.resume() succeeds and isPlaying state + localStorage flip correctly. Splash testid: sky-splash-begin-btn. Music toggle: settings-music-toggle. Tracks: settings-track-default (alias for serene), settings-track-sleepy, settings-track-dreamy. Sky swatches: sky-swatch-<character_id> for all 12 themes.",
+  "rca of the issue": "Both reported regressions are RESOLVED. (Bug 1) Audio was failing because mixkit.co URLs returned 403 due to hotlink protection — AudioContext.jsx now generates ambient pads entirely with Web Audio API (oscillators + biquad + LFO), eliminating external dependencies. togglePlay() ensures the AudioContext is resumed inside the user-gesture callback. (Bug 2) Shop cards used a single generic <Palette /> icon for all sky themes — replaced with <SkyThemeSwatch themeId={item.character_id} size={80} /> which renders a unique gradient + signature animation per theme. 12 distinct presets cover every backend character_id."
+}
