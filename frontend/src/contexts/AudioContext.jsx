@@ -9,35 +9,43 @@ export const useAudio = () => {
 };
 
 // =============================================================================
-// Ambient tracks are generated entirely with the Web Audio API — no external
-// audio files, no hotlink-protected CDNs, no autoplay-policy edge cases.
-// Each "track" is a slow drone of sustained chord notes with gentle detuning
-// and a soft low-pass filter to evoke a dreamy sky atmosphere.
+// Ambient is generated entirely with the Web Audio API as PLUCKED bell/music-box
+// tones at high register — sparse, randomized, light and airy. Never a sustained
+// organ drone. Each "track" is a pentatonic scale + scheduling parameters.
 // =============================================================================
 
 export const AMBIENT_TRACKS = {
   serene: {
     label: 'Serene Sky',
-    description: 'Gentle pads drifting through clear blue',
-    // C major 9 (C, E, G, B, D) — open, floating
-    notes: [130.81, 164.81, 196.00, 246.94, 293.66],
-    filterFreq: 800,
-    waveform: 'sine',
+    description: 'Soft music-box drifting through the breeze',
+    // C major pentatonic — mid/high register
+    notes: [523.25, 587.33, 659.25, 783.99, 880.00, 1046.50, 1174.66],
+    filterFreq: 2800,
+    intervalRange: [1.4, 2.6],     // seconds between events
+    arpChance: 0.35,                // probability of a 2-3 note arpeggio
+    decay: 2.2,                     // seconds — note tail
+    waveform: 'triangle',           // brighter than sine
   },
   sleepy: {
     label: 'Sleepy Clouds',
-    description: 'Soft chimes blooming slowly',
-    // A minor 7 (A, C, E, G) — warm, calm
-    notes: [110.00, 130.81, 164.81, 196.00],
-    filterFreq: 700,
-    waveform: 'triangle',
+    description: 'Slow chimes drifting through soft air',
+    // A minor pentatonic — slightly warmer
+    notes: [440.00, 523.25, 587.33, 659.25, 783.99, 880.00, 1046.50],
+    filterFreq: 2400,
+    intervalRange: [2.2, 4.0],
+    arpChance: 0.25,
+    decay: 2.8,
+    waveform: 'sine',
   },
   dreamy: {
     label: 'Dream Drift',
-    description: 'Floating, hopeful, weightless',
-    // F major 7 with high D (F, A, C, E, D) — bright, hopeful
-    notes: [87.31, 110.00, 130.81, 164.81, 293.66],
-    filterFreq: 900,
+    description: 'Twinkling glockenspiel, hopeful and bright',
+    // F major pentatonic — high, sparkling
+    notes: [698.46, 783.99, 880.00, 1046.50, 1174.66, 1318.51, 1396.91],
+    filterFreq: 3400,
+    intervalRange: [1.0, 2.0],
+    arpChance: 0.5,
+    decay: 1.8,
     waveform: 'sine',
   },
 };
@@ -64,20 +72,23 @@ const readStr = (key, def) => {
 
 export const AudioProvider = ({ children }) => {
   const [isPlaying, setIsPlaying] = useState(() => readBool(LS_KEYS.isPlaying, false));
-  const [volume, setVolume] = useState(() => readNum(LS_KEYS.volume, 0.18));
+  const [volume, setVolume] = useState(() => readNum(LS_KEYS.volume, 0.35));
   const [currentTrack, setCurrentTrack] = useState(() => readStr(LS_KEYS.track, 'serene'));
   const [soundEffectsEnabled, setSoundEffectsEnabled] = useState(() => readBool(LS_KEYS.sfx, true));
-  const [audioReady, setAudioReady] = useState(false);
 
   // Web Audio refs
-  const ctxRef = useRef(null);            // AudioContext
-  const masterGainRef = useRef(null);     // Master volume gain
-  const lfoRef = useRef(null);            // Slow modulation
-  const filterRef = useRef(null);         // Low-pass for softness
-  const voicesRef = useRef([]);           // Active oscillators
-  const fadeIntervalRef = useRef(null);
+  const ctxRef = useRef(null);
+  const masterGainRef = useRef(null);
+  const filterRef = useRef(null);
+  const schedulerTimeoutRef = useRef(null);
 
-  // ---------- Helpers ----------
+  // Stable refs for scheduler closure (avoid stale captures)
+  const isPlayingRef = useRef(isPlaying);
+  const currentTrackRef = useRef(currentTrack);
+  useEffect(() => { isPlayingRef.current = isPlaying; }, [isPlaying]);
+  useEffect(() => { currentTrackRef.current = currentTrack; }, [currentTrack]);
+
+  // ---------- Audio Context ----------
   const ensureContext = useCallback(() => {
     if (ctxRef.current) return ctxRef.current;
     const Ctx = window.AudioContext || window.webkitAudioContext;
@@ -85,79 +96,21 @@ export const AudioProvider = ({ children }) => {
     const ctx = new Ctx();
     ctxRef.current = ctx;
 
-    // Master chain: voices → filter → masterGain → destination
     const filter = ctx.createBiquadFilter();
     filter.type = 'lowpass';
-    filter.frequency.value = 800;
-    filter.Q.value = 0.6;
+    filter.frequency.value = 2800;
+    filter.Q.value = 0.7;
     filterRef.current = filter;
 
     const master = ctx.createGain();
-    master.gain.value = 0; // start silent, fade in
+    master.gain.value = 0;
     masterGainRef.current = master;
 
     filter.connect(master).connect(ctx.destination);
     return ctx;
   }, []);
 
-  const stopVoices = useCallback(() => {
-    const ctx = ctxRef.current;
-    if (!ctx) return;
-    voicesRef.current.forEach((v) => {
-      try {
-        v.osc.stop(ctx.currentTime + 0.05);
-        v.osc.disconnect();
-        v.gain.disconnect();
-      } catch (e) {}
-    });
-    voicesRef.current = [];
-    if (lfoRef.current) {
-      try { lfoRef.current.stop(); lfoRef.current.disconnect(); } catch (e) {}
-      lfoRef.current = null;
-    }
-  }, []);
-
-  const startVoices = useCallback((trackKey) => {
-    const ctx = ensureContext();
-    if (!ctx) return;
-    if (ctx.state === 'suspended') ctx.resume();
-
-    stopVoices();
-    const track = AMBIENT_TRACKS[trackKey] || AMBIENT_TRACKS.serene;
-    filterRef.current.frequency.setTargetAtTime(track.filterFreq, ctx.currentTime, 0.5);
-
-    // Slow LFO that adds barely-perceptible breathing motion to each voice's gain
-    const lfo = ctx.createOscillator();
-    lfo.type = 'sine';
-    lfo.frequency.value = 0.08; // ~12s breathing cycle
-    lfoRef.current = lfo;
-
-    track.notes.forEach((freq, i) => {
-      const osc = ctx.createOscillator();
-      osc.type = track.waveform;
-      osc.frequency.value = freq;
-      // Slight detune per voice for richness
-      osc.detune.value = (i % 2 === 0 ? -3 : 3) * (i + 1);
-
-      const g = ctx.createGain();
-      // Per-voice base gain — quieter for higher notes
-      const baseGain = 0.05 + (0.05 / (i + 1));
-      g.gain.value = baseGain;
-
-      // LFO -> per-voice gain modulation (very subtle)
-      const lfoGain = ctx.createGain();
-      lfoGain.gain.value = baseGain * 0.35;
-      lfo.connect(lfoGain).connect(g.gain);
-
-      osc.connect(g).connect(filterRef.current);
-      osc.start();
-      voicesRef.current.push({ osc, gain: g });
-    });
-
-    lfo.start();
-  }, [ensureContext, stopVoices]);
-
-  const fadeMaster = useCallback((target, durationMs = 1200) => {
+  const fadeMaster = useCallback((target, durationMs = 800) => {
     const ctx = ctxRef.current;
     if (!ctx || !masterGainRef.current) return;
     const now = ctx.currentTime;
@@ -165,6 +118,83 @@ export const AudioProvider = ({ children }) => {
     g.cancelScheduledValues(now);
     g.setValueAtTime(g.value, now);
     g.linearRampToValueAtTime(Math.max(0.0001, target), now + durationMs / 1000);
+  }, []);
+
+  // ---------- Pluck synthesis (bell / music-box tone) ----------
+  const playPluck = useCallback((freq, startOffsetSec, decay, waveform, panAmt = 0) => {
+    const ctx = ctxRef.current;
+    if (!ctx) return;
+    const start = ctx.currentTime + startOffsetSec;
+
+    // Main tone
+    const osc = ctx.createOscillator();
+    osc.type = waveform;
+    osc.frequency.value = freq;
+
+    // Subtle harmonic an octave up for sparkle (bell character)
+    const osc2 = ctx.createOscillator();
+    osc2.type = 'sine';
+    osc2.frequency.value = freq * 2;
+
+    const g = ctx.createGain();
+    const g2 = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, start);
+    g.gain.exponentialRampToValueAtTime(0.18, start + 0.008);   // sharp pluck attack
+    g.gain.exponentialRampToValueAtTime(0.0001, start + decay); // bell decay
+    g2.gain.setValueAtTime(0.0001, start);
+    g2.gain.exponentialRampToValueAtTime(0.06, start + 0.008);
+    g2.gain.exponentialRampToValueAtTime(0.0001, start + decay * 0.7);
+
+    // Gentle stereo panning for airiness (skip if StereoPanner unavailable)
+    const target = filterRef.current;
+    if (ctx.createStereoPanner) {
+      const panner = ctx.createStereoPanner();
+      panner.pan.value = Math.max(-1, Math.min(1, panAmt));
+      osc.connect(g).connect(panner);
+      osc2.connect(g2).connect(panner);
+      panner.connect(target);
+    } else {
+      osc.connect(g).connect(target);
+      osc2.connect(g2).connect(target);
+    }
+
+    osc.start(start);
+    osc2.start(start);
+    osc.stop(start + decay + 0.1);
+    osc2.stop(start + decay + 0.1);
+  }, []);
+
+  // ---------- Scheduler loop ----------
+  const scheduleNext = useCallback(() => {
+    const track = AMBIENT_TRACKS[currentTrackRef.current] || AMBIENT_TRACKS.serene;
+    const [lo, hi] = track.intervalRange;
+    const wait = (lo + Math.random() * (hi - lo)) * 1000;
+
+    schedulerTimeoutRef.current = setTimeout(() => {
+      if (!isPlayingRef.current) return;
+      // Choose 1-3 notes
+      let noteCount = 1;
+      if (Math.random() < track.arpChance) {
+        noteCount = Math.random() < 0.5 ? 2 : 3;
+      }
+      // Pick a starting index and walk up the scale for arpeggios (more musical)
+      const startIdx = Math.floor(Math.random() * (track.notes.length - noteCount + 1));
+      for (let i = 0; i < noteCount; i++) {
+        const freq = track.notes[startIdx + i];
+        // Octave drop occasionally for variety
+        const actualFreq = Math.random() < 0.12 ? freq * 0.5 : freq;
+        const pan = (Math.random() - 0.5) * 0.6; // -0.3 to +0.3
+        playPluck(actualFreq, i * 0.14, track.decay, track.waveform, pan);
+      }
+      scheduleNext();
+    }, wait);
+  }, [playPluck]);
+
+  const stopScheduler = useCallback(() => {
+    if (schedulerTimeoutRef.current) {
+      clearTimeout(schedulerTimeoutRef.current);
+      schedulerTimeoutRef.current = null;
+    }
   }, []);
 
   // ---------- Public API ----------
@@ -176,37 +206,46 @@ export const AudioProvider = ({ children }) => {
     }
 
     if (isPlaying) {
-      fadeMaster(0, 800);
-      // Stop voices after fade
-      if (fadeIntervalRef.current) clearTimeout(fadeIntervalRef.current);
-      fadeIntervalRef.current = setTimeout(() => stopVoices(), 900);
+      fadeMaster(0, 600);
+      stopScheduler();
       setIsPlaying(false);
     } else {
-      startVoices(currentTrack);
-      fadeMaster(volume, 1500);
+      // Apply track filter cutoff
+      const track = AMBIENT_TRACKS[currentTrack] || AMBIENT_TRACKS.serene;
+      filterRef.current.frequency.setTargetAtTime(track.filterFreq, ctx.currentTime, 0.3);
+      fadeMaster(volume, 900);
       setIsPlaying(true);
+      // Kick off scheduler — first note within ~600ms so user hears it right away
+      schedulerTimeoutRef.current = setTimeout(() => {
+        if (!isPlayingRef.current) return;
+        const t = AMBIENT_TRACKS[currentTrackRef.current] || AMBIENT_TRACKS.serene;
+        playPluck(t.notes[2], 0, t.decay, t.waveform, 0);
+        scheduleNext();
+      }, 400);
     }
-    setAudioReady(true);
-  }, [isPlaying, currentTrack, volume, ensureContext, fadeMaster, startVoices, stopVoices]);
+  }, [isPlaying, currentTrack, volume, ensureContext, fadeMaster, scheduleNext, stopScheduler, playPluck]);
 
   const updateVolume = useCallback((newVolume) => {
     const v = Math.max(0, Math.min(1, newVolume));
     setVolume(v);
-    if (isPlaying) fadeMaster(v, 300);
+    if (isPlaying) fadeMaster(v, 200);
   }, [isPlaying, fadeMaster]);
 
   const changeTrack = useCallback((track) => {
     if (!AMBIENT_TRACKS[track]) return;
     setCurrentTrack(track);
-    if (isPlaying) {
-      // Crossfade: drop master to zero, swap voices, fade back
-      fadeMaster(0.0001, 400);
-      setTimeout(() => {
-        startVoices(track);
-        fadeMaster(volume, 1000);
-      }, 450);
+    if (isPlaying && ctxRef.current && filterRef.current) {
+      const t = AMBIENT_TRACKS[track];
+      filterRef.current.frequency.setTargetAtTime(t.filterFreq, ctxRef.current.currentTime, 0.4);
+      // Restart scheduler with new track timing
+      stopScheduler();
+      schedulerTimeoutRef.current = setTimeout(() => {
+        if (!isPlayingRef.current) return;
+        playPluck(t.notes[2], 0, t.decay, t.waveform, 0);
+        scheduleNext();
+      }, 300);
     }
-  }, [isPlaying, volume, fadeMaster, startVoices]);
+  }, [isPlaying, scheduleNext, stopScheduler, playPluck]);
 
   const toggleSoundEffects = useCallback(() => {
     setSoundEffectsEnabled((p) => !p);
@@ -219,7 +258,7 @@ export const AudioProvider = ({ children }) => {
     if (ctx.state === 'suspended') ctx.resume();
     const now = ctx.currentTime;
 
-    const playNote = (freq, start, dur, peak = 0.16) => {
+    const playNote = (freq, start, dur, peak = 0.18) => {
       const osc = ctx.createOscillator();
       const g = ctx.createGain();
       osc.type = 'sine';
@@ -233,16 +272,16 @@ export const AudioProvider = ({ children }) => {
     };
 
     if (type === 'correct') {
-      playNote(523.25, 0, 0.45, 0.18);
-      playNote(659.25, 0.08, 0.45, 0.18);
-      playNote(783.99, 0.16, 0.55, 0.20);
+      playNote(523.25, 0, 0.45, 0.20);
+      playNote(659.25, 0.08, 0.45, 0.20);
+      playNote(783.99, 0.16, 0.55, 0.22);
     } else if (type === 'incorrect') {
       playNote(392.00, 0, 0.4, 0.06);
       playNote(369.99, 0.12, 0.45, 0.06);
     } else if (type === 'reward') {
-      playNote(659.25, 0, 0.55, 0.20);
-      playNote(880.00, 0.1, 0.55, 0.20);
-      playNote(987.77, 0.22, 0.65, 0.22);
+      playNote(659.25, 0, 0.55, 0.22);
+      playNote(880.00, 0.1, 0.55, 0.22);
+      playNote(987.77, 0.22, 0.65, 0.24);
     } else if (type === 'click') {
       playNote(880, 0, 0.08, 0.05);
     }
@@ -257,12 +296,12 @@ export const AudioProvider = ({ children }) => {
   // ---------- Cleanup ----------
   useEffect(() => {
     return () => {
-      stopVoices();
+      stopScheduler();
       if (ctxRef.current) {
         try { ctxRef.current.close(); } catch (e) {}
       }
     };
-  }, [stopVoices]);
+  }, [stopScheduler]);
 
   return (
     <AudioContext.Provider value={{
@@ -271,7 +310,6 @@ export const AudioProvider = ({ children }) => {
       currentTrack,
       tracks: AMBIENT_TRACKS,
       soundEffectsEnabled,
-      audioReady,
       togglePlay,
       updateVolume,
       changeTrack,

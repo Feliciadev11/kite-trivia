@@ -11,9 +11,9 @@ import { AtmosphericBackground } from "../components/Atmosphere";
 import { useAuth } from "../App";
 
 const TRACK_META = {
-  serene: { label: "Serene Sky", description: "Gentle pads drifting through clear blue", icon: Cloud },
-  sleepy: { label: "Sleepy Clouds", description: "Soft chimes blooming slowly", icon: Moon },
-  dreamy: { label: "Dream Drift", description: "Floating, hopeful, weightless", icon: Wind },
+  serene: { label: "Serene Sky", description: "Soft music-box drifting through the breeze", icon: Cloud },
+  sleepy: { label: "Sleepy Clouds", description: "Slow chimes drifting through soft air", icon: Moon },
+  dreamy: { label: "Dream Drift", description: "Twinkling glockenspiel, hopeful and bright", icon: Wind },
 };
 
 export const SettingsPage = () => {
