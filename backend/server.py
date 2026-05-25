@@ -78,6 +78,7 @@ class User(BaseModel):
     login_streak: int = 0
     last_login_date: Optional[str] = None
     total_rewards_claimed: int = 0
+    recently_seen_questions: List[str] = []
 
 class Character(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -535,56 +536,85 @@ def difficulty_mix_for_level(level: int) -> dict:
 @api_router.get("/questions", response_model=List[TriviaQuestion])
 async def get_questions(
     limit: int = 10,
-    difficulty: Optional[int] = None,  # deprecated/optional override
+    difficulty: Optional[int] = None,
     current_user: User = Depends(get_current_user),
 ):
-    """Return a level-tuned bag of questions.
+    """Return a level-tuned bag of questions, avoiding recently-seen ones.
 
-    By default the mix is derived from the player's current level via
-    `difficulty_mix_for_level`. Pass `difficulty` to override and lock to a max
-    bucket (used for testing or future hard-mode endpoints)."""
+    The bag is composed per `difficulty_mix_for_level(user.level)`. Recently
+    served question_ids are tracked on the user and excluded from sampling so
+    rounds feel fresh. The exclusion list auto-trims when it gets large relative
+    to the available pool, so the user never runs out of questions."""
 
     # Lazy seed
     total = await db.questions.count_documents({})
     if total == 0:
         await seed_questions()
 
-    # Override path: legacy behavior — all buckets up to `difficulty`
+    # Pull recently-seen ids and decide whether to clip them so the pool never starves
+    recent = list(current_user.recently_seen_questions or [])
+    # If recent buffer covers > 60% of the total pool, trim it back to last 25%
+    if len(recent) > int(total * 0.6):
+        recent = recent[-int(total * 0.25):]
+
+    excluded = {"question_id": {"$nin": recent}} if recent else {}
+
+    async def sample(match_extra: dict, n: int) -> list:
+        match = {**match_extra, **excluded}
+        docs = await db.questions.aggregate([
+            {"$match": match},
+            {"$sample": {"size": n}},
+            {"$project": {"_id": 0}},
+        ]).to_list(n)
+        # Fallback: bucket exhausted under exclusion → relax exclusion
+        if len(docs) < n:
+            fill = await db.questions.aggregate([
+                {"$match": match_extra},
+                {"$sample": {"size": n - len(docs)}},
+                {"$project": {"_id": 0}},
+            ]).to_list(n - len(docs))
+            existing = {d["question_id"] for d in docs}
+            docs.extend([d for d in fill if d["question_id"] not in existing])
+        return docs
+
+    # Override path
     if difficulty is not None:
-        questions = await db.questions.aggregate([
-            {"$match": {"difficulty": {"$lte": difficulty}}},
-            {"$sample": {"size": limit}},
-            {"$project": {"_id": 0}},
-        ]).to_list(limit)
-        return questions
+        bag = await sample({"difficulty": {"$lte": difficulty}}, limit)
+    else:
+        # Weighted mix by level
+        mix = difficulty_mix_for_level(current_user.level)
+        bag: list = []
+        for bucket, weight in mix.items():
+            count = round(weight * limit)
+            if count <= 0:
+                continue
+            chunk = await sample({"difficulty": bucket}, count)
+            bag.extend(chunk)
 
-    # Weighted mix based on level
-    mix = difficulty_mix_for_level(current_user.level)
-    bag: list = []
-    for bucket, weight in mix.items():
-        count = round(weight * limit)
-        if count <= 0:
-            continue
-        chunk = await db.questions.aggregate([
-            {"$match": {"difficulty": bucket}},
-            {"$sample": {"size": count}},
-            {"$project": {"_id": 0}},
-        ]).to_list(count)
-        bag.extend(chunk)
+        # Top-up if rounding under-filled
+        if len(bag) < limit:
+            seen_ids = {q["question_id"] for q in bag}
+            fillers = await db.questions.aggregate([
+                {"$match": {"difficulty": 1, "question_id": {"$nin": list(seen_ids) + recent}}},
+                {"$sample": {"size": limit - len(bag)}},
+                {"$project": {"_id": 0}},
+            ]).to_list(limit - len(bag))
+            bag.extend(fillers)
 
-    # If rounding under-filled (rare), top up from the easiest bucket
-    if len(bag) < limit:
-        seen_ids = {q["question_id"] for q in bag}
-        fillers = await db.questions.aggregate([
-            {"$match": {"difficulty": 1, "question_id": {"$nin": list(seen_ids)}}},
-            {"$sample": {"size": limit - len(bag)}},
-            {"$project": {"_id": 0}},
-        ]).to_list(limit - len(bag))
-        bag.extend(fillers)
-
-    # Shuffle so buckets are interleaved (not grouped)
     random.shuffle(bag)
-    return bag[:limit]
+    bag = bag[:limit]
+
+    # Track the served IDs on the user so the next round doesn't repeat them.
+    # Cap the recent buffer at 80 entries (~8 rounds of memory).
+    served_ids = [q["question_id"] for q in bag]
+    if served_ids:
+        new_recent = (recent + served_ids)[-80:]
+        await db.users.update_one(
+            {"user_id": current_user.user_id},
+            {"$set": {"recently_seen_questions": new_recent}},
+        )
+
+    return bag
 
 
 @api_router.post("/questions/answer")
