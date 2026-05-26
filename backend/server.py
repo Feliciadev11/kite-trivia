@@ -726,6 +726,59 @@ async def get_unlock_gates(current_user: User = Depends(get_current_user)):
     ]
     return {"gates": gates, "user_level": current_user.level}
 
+@api_router.get("/characters/next-unlock")
+async def get_next_unlock(current_user: User = Depends(get_current_user)):
+    """Return a teaser for the next collectible the player will unlock as they level up.
+
+    Picks the nearest upcoming gate (smallest unlock_level above current level),
+    then samples one matching item the player doesn't yet own. Falls back to
+    a random matching item if all are owned."""
+    user_level = current_user.level
+
+    # Find the smallest gate above user's current level
+    upcoming = [(cat, rarity, lvl) for (cat, rarity), lvl in PROGRESSIVE_GATES.items()
+                if lvl > user_level]
+    if not upcoming:
+        return {"next_unlock": None, "user_level": user_level}
+
+    upcoming.sort(key=lambda x: x[2])
+    cat, rarity, gate_level = upcoming[0]
+
+    # Sample a matching item
+    owned_field = {
+        "kite": "owned_characters",
+        "companion": "owned_companions",
+        "sky_theme": "owned_sky_themes",
+    }[cat]
+    owned_list = getattr(current_user, owned_field, [])
+
+    items = await db.characters.find(
+        {"category": cat, "rarity": rarity},
+        {"_id": 0},
+    ).to_list(50)
+    if not items:
+        return {"next_unlock": None, "user_level": user_level}
+
+    unowned = [i for i in items if i["character_id"] not in owned_list]
+    sample = random.choice(unowned) if unowned else random.choice(items)
+
+    return {
+        "next_unlock": {
+            "category": cat,
+            "rarity": rarity,
+            "unlock_level": gate_level,
+            "levels_remaining": gate_level - user_level,
+            "sample_item": {
+                "character_id": sample["character_id"],
+                "name": sample["name"],
+                "description": sample["description"],
+                "rarity": sample["rarity"],
+                "category": sample["category"],
+            },
+        },
+        "user_level": user_level,
+    }
+
 @api_router.post("/characters/equip")
 async def equip_character(
     data: dict,

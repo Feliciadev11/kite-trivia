@@ -10,6 +10,7 @@ import axios from "axios";
 import { toast } from "sonner";
 import { AtmosphericBackground } from "../components/Atmosphere";
 import { AudioControl } from "../components/AudioControl";
+import { NextUnlockTease } from "../components/NextUnlockTease";
 
 export default function DashboardPage() {
   const navigate = useNavigate();
@@ -176,6 +177,11 @@ export default function DashboardPage() {
             </div>
           </motion.div>
         )}
+
+        {/* Next Unlock Tease */}
+        <div className="max-w-2xl mx-auto mb-8" data-testid="next-unlock-container">
+          <NextUnlockTease />
+        </div>
 
         <div className="grid md:grid-cols-2 gap-8 max-w-5xl mx-auto">
           {/* Character Card */}
