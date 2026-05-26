@@ -7,11 +7,20 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { useAuth, API, LoadingKite } from "../App";
 import { toast } from "sonner";
-import { ArrowLeft, Lock, Check, Sparkles, Wind, Palette, Heart, CreditCard, Loader2, DollarSign } from "lucide-react";
+import { ArrowLeft, Lock, Check, Sparkles, Wind, Palette, Heart, CreditCard, Loader2, DollarSign, Star } from "lucide-react";
 import { KiteCharacter, CompanionCharacter } from "../components/KiteCharacter";
 import { AtmosphericBackground } from "../components/Atmosphere";
 import { SkyThemeSwatch } from "../components/SkyThemeSwatch";
 import { AudioControl } from "../components/AudioControl";
+
+// Mirror of backend PROGRESSIVE_GATES — used to render rarity-section headers
+// with a "Unlocks at Level N" badge for items the player can't yet purchase.
+// Backend remains source of truth for purchase enforcement.
+const RARITY_GATES = {
+  kite:       { common: 3,  rare: 8,  epic: 14, legendary: 20 },
+  companion:  { common: 5,  rare: 10, epic: 16, legendary: 22 },
+  sky_theme:  { common: 4,  rare: 9,  epic: 15, legendary: 20 },
+};
 
 const RARITY_COLORS = {
   common: { bg: 'bg-slate-50', border: 'border-slate-200', text: 'text-slate-600', badge: 'bg-slate-200 text-slate-700' },
@@ -245,27 +254,35 @@ export default function ShopPage() {
                 {['common', 'rare', 'epic', 'legendary'].map(rarity => {
                   const items = sortByRarity(kites).filter(k => k.rarity === rarity);
                   if (items.length === 0) return null;
+                  const gate = RARITY_GATES.kite[rarity] || 0;
+                  const locked = (user?.level || 1) < gate;
                   return (
-                    <div key={rarity} className="mb-8">
-                      <h3 className="text-lg font-semibold text-sky-800 mb-4 flex items-center gap-2 capitalize">
-                        {rarity === 'legendary' && <Sparkles className="w-5 h-5 text-amber-500" />}
-                        {rarity} Kites
-                      </h3>
-                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                        {items.map((item, index) => (
-                          <ItemCard
-                            key={item.character_id}
-                            item={item}
-                            owned={user?.owned_characters?.includes(item.character_id)}
-                            equipped={user?.current_character === item.character_id}
-                            userLevel={user?.level || 1}
-                            onEquip={() => handleEquip(item.character_id, 'kite')}
-                            onPurchase={() => handlePurchase(item)}
-                            index={index}
-                            type="kite"
-                          />
-                        ))}
-                      </div>
+                    <div key={rarity}>
+                      <RaritySection
+                        rarity={rarity}
+                        items={items}
+                        gateLevel={gate}
+                        userLevel={user?.level || 1}
+                      >
+                        Kites
+                      </RaritySection>
+                      {!locked && (
+                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mb-8">
+                          {items.map((item, index) => (
+                            <ItemCard
+                              key={item.character_id}
+                              item={item}
+                              owned={user?.owned_characters?.includes(item.character_id)}
+                              equipped={user?.current_character === item.character_id}
+                              userLevel={user?.level || 1}
+                              onEquip={() => handleEquip(item.character_id, 'kite')}
+                              onPurchase={() => handlePurchase(item)}
+                              index={index}
+                              type="kite"
+                            />
+                          ))}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -282,27 +299,35 @@ export default function ShopPage() {
                 {['common', 'rare', 'epic', 'legendary'].map(rarity => {
                   const items = sortByRarity(companions).filter(k => k.rarity === rarity);
                   if (items.length === 0) return null;
+                  const gate = RARITY_GATES.companion[rarity] || 0;
+                  const locked = (user?.level || 1) < gate;
                   return (
-                    <div key={rarity} className="mb-8">
-                      <h3 className="text-lg font-semibold text-sky-800 mb-4 flex items-center gap-2 capitalize">
-                        {rarity === 'legendary' && <Sparkles className="w-5 h-5 text-amber-500" />}
-                        {rarity} Companions
-                      </h3>
-                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                        {items.map((item, index) => (
-                          <ItemCard
-                            key={item.character_id}
-                            item={item}
-                            owned={user?.owned_companions?.includes(item.character_id)}
-                            equipped={user?.current_companion === item.character_id}
-                            userLevel={user?.level || 1}
-                            onEquip={() => handleEquip(item.character_id, 'companion')}
-                            onPurchase={() => handlePurchase(item)}
-                            index={index}
-                            type="companion"
-                          />
-                        ))}
-                      </div>
+                    <div key={rarity}>
+                      <RaritySection
+                        rarity={rarity}
+                        items={items}
+                        gateLevel={gate}
+                        userLevel={user?.level || 1}
+                      >
+                        Companions
+                      </RaritySection>
+                      {!locked && (
+                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mb-8">
+                          {items.map((item, index) => (
+                            <ItemCard
+                              key={item.character_id}
+                              item={item}
+                              owned={user?.owned_companions?.includes(item.character_id)}
+                              equipped={user?.current_companion === item.character_id}
+                              userLevel={user?.level || 1}
+                              onEquip={() => handleEquip(item.character_id, 'companion')}
+                              onPurchase={() => handlePurchase(item)}
+                              index={index}
+                              type="companion"
+                            />
+                          ))}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -319,27 +344,35 @@ export default function ShopPage() {
                 {['common', 'rare', 'epic', 'legendary'].map(rarity => {
                   const items = sortByRarity(skyThemes).filter(k => k.rarity === rarity);
                   if (items.length === 0) return null;
+                  const gate = RARITY_GATES.sky_theme[rarity] || 0;
+                  const locked = (user?.level || 1) < gate;
                   return (
-                    <div key={rarity} className="mb-8">
-                      <h3 className="text-lg font-semibold text-sky-800 mb-4 flex items-center gap-2 capitalize">
-                        {rarity === 'legendary' && <Sparkles className="w-5 h-5 text-amber-500" />}
-                        {rarity} Sky Themes
-                      </h3>
-                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                        {items.map((item, index) => (
-                          <ItemCard
-                            key={item.character_id}
-                            item={item}
-                            owned={user?.owned_sky_themes?.includes(item.character_id)}
-                            equipped={user?.current_sky_theme === item.character_id}
-                            userLevel={user?.level || 1}
-                            onEquip={() => handleEquip(item.character_id, 'sky_theme')}
-                            onPurchase={() => handlePurchase(item)}
-                            index={index}
-                            type="sky_theme"
-                          />
-                        ))}
-                      </div>
+                    <div key={rarity}>
+                      <RaritySection
+                        rarity={rarity}
+                        items={items}
+                        gateLevel={gate}
+                        userLevel={user?.level || 1}
+                      >
+                        Sky Themes
+                      </RaritySection>
+                      {!locked && (
+                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mb-8">
+                          {items.map((item, index) => (
+                            <ItemCard
+                              key={item.character_id}
+                              item={item}
+                              owned={user?.owned_sky_themes?.includes(item.character_id)}
+                              equipped={user?.current_sky_theme === item.character_id}
+                              userLevel={user?.level || 1}
+                              onEquip={() => handleEquip(item.character_id, 'sky_theme')}
+                              onPurchase={() => handlePurchase(item)}
+                              index={index}
+                              type="sky_theme"
+                            />
+                          ))}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -529,3 +562,62 @@ const ItemCard = ({ item, owned, equipped, userLevel, onEquip, onPurchase, index
 };
 
 export { ShopPage };
+
+const RaritySection = ({ rarity, items, gateLevel, userLevel, children, accent }) => {
+  if (!items || items.length === 0) return null;
+  const locked = userLevel < gateLevel;
+  const justUnlocked = userLevel === gateLevel;
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5, ease: 'easeOut' }}
+      className={`mb-10 ${locked ? 'opacity-70' : ''}`}
+      data-testid={`rarity-section-${rarity}`}
+    >
+      <div className="flex items-center justify-between mb-4 pb-2 border-b border-white/40">
+        <h3 className="text-lg font-semibold text-sky-800 flex items-center gap-2 capitalize">
+          {rarity === 'legendary' && <Sparkles className="w-5 h-5 text-amber-500" />}
+          {rarity === 'epic' && <Star className="w-5 h-5 text-violet-500" />}
+          {rarity} {children}
+        </h3>
+        {locked ? (
+          <motion.span
+            initial={{ opacity: 0, x: 8 }}
+            animate={{ opacity: 1, x: 0 }}
+            className="text-xs text-sky-500 bg-white/70 px-3 py-1 rounded-full flex items-center gap-1.5 backdrop-blur-sm"
+            data-testid={`rarity-gate-${rarity}`}
+          >
+            <Lock className="w-3 h-3" />
+            Unlocks at Level {gateLevel}
+          </motion.span>
+        ) : justUnlocked ? (
+          <motion.span
+            initial={{ scale: 0.85, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="text-xs text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full flex items-center gap-1.5"
+            data-testid={`rarity-newly-unlocked-${rarity}`}
+          >
+            <Sparkles className="w-3 h-3" />
+            Newly available
+          </motion.span>
+        ) : (
+          <span className={`text-xs px-3 py-1 rounded-full ${accent || 'bg-white/40 text-sky-600'}`}>
+            {items.length} item{items.length === 1 ? '' : 's'}
+          </span>
+        )}
+      </div>
+      {locked && (
+        <motion.p
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="text-sm text-sky-600/70 mb-4 italic"
+        >
+          {items.length} item{items.length === 1 ? '' : 's'} waiting in the clouds — keep playing to discover them.
+        </motion.p>
+      )}
+    </motion.div>
+  );
+};
+
+export { RaritySection };

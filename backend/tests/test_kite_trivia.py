@@ -185,26 +185,30 @@ def test_get_characters(client):
 
 
 def test_purchase_and_equip_kite(client):
-    chars = client.get(f"{API}/characters").json()
     me = client.get(f"{API}/auth/me").json()
-    user_level = me.get("level", 1)
-    # Pick affordable kite within unlock level not already owned/equipped
+    user_id = me["user_id"]
+    # Promote user past progressive gates so common kites are buyable
+    import os
+    from pymongo import MongoClient
+    mc = MongoClient(os.environ.get("MONGO_URL"))
+    mc[os.environ.get("DB_NAME", "test_database")].users.update_one(
+        {"user_id": user_id}, {"$set": {"level": 5}}
+    )
+    chars = client.get(f"{API}/characters").json()
     owned = set(me.get("owned_characters", []))
     kite = next(
         (c for c in chars
          if c["category"] == "kite"
-         and c.get("unlock_level", 1) <= user_level
+         and c.get("unlock_level", 1) <= 5
          and c["character_id"] not in owned),
         None,
     )
     if kite is None:
-        pytest.skip("No purchasable kite available for current user level")
+        pytest.skip("No purchasable kite available after level bump")
 
     pr = client.post(f"{API}/characters/purchase", json={"character_id": kite["character_id"]})
-    # Could be 200 (success) or 400 (not enough XP) — both are acceptable; only fail on 5xx
     assert pr.status_code < 500, pr.text
 
-    # Equip via existing equip endpoint
     eq = client.post(f"{API}/characters/equip", json={"character_id": kite["character_id"], "type": "kite"})
     assert eq.status_code in (200, 400, 403), eq.text
 
@@ -375,22 +379,28 @@ def test_purchase_free_sky_theme_grants_directly(client):
 
 def test_purchase_paid_item_returns_session_url(client):
     """Paid items should return Stripe session_id + url, and create a payment_transactions row."""
-    chars = client.get(f"{API}/characters").json()
     me = client.get(f"{API}/auth/me").json()
-    user_level = me.get("level", 1)
+    user_id = me["user_id"]
+    # Promote past gates
+    import os
+    from pymongo import MongoClient
+    mc = MongoClient(os.environ.get("MONGO_URL"))
+    mc[os.environ.get("DB_NAME", "test_database")].users.update_one(
+        {"user_id": user_id}, {"$set": {"level": 8}}
+    )
+    chars = client.get(f"{API}/characters").json()
     owned = set(me.get("owned_characters", []) +
                 me.get("owned_companions", []) +
                 me.get("owned_sky_themes", []))
-    # Pick a low-priced item within unlock level and not owned
     paid = next(
         (c for c in chars
          if float(c.get("price", 0)) > 0
-         and c.get("unlock_level", 0) <= user_level
+         and c.get("unlock_level", 0) <= 8
          and c["character_id"] not in owned),
         None,
     )
     if paid is None:
-        pytest.skip("No purchasable paid item for current user level")
+        pytest.skip("No purchasable paid item")
 
     r = client.post(
         f"{API}/characters/purchase",

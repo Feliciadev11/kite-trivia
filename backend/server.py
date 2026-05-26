@@ -673,17 +673,58 @@ async def submit_answer(
 
 # ==================== CHARACTER ROUTES ====================
 
+# ==================== PROGRESSIVE UNLOCK GATES ====================
+# Players unlock items by rarity + category as they level up. The gate is
+# applied on top of any per-item unlock_level — whichever is higher wins.
+# Designed to feel like discovery, not a paywall.
+PROGRESSIVE_GATES = {
+    ("kite", "common"): 3,
+    ("sky_theme", "common"): 4,
+    ("companion", "common"): 5,
+    ("kite", "rare"): 8,
+    ("sky_theme", "rare"): 9,
+    ("companion", "rare"): 10,
+    ("kite", "epic"): 14,
+    ("sky_theme", "epic"): 15,
+    ("companion", "epic"): 16,
+    ("kite", "legendary"): 20,
+    ("sky_theme", "legendary"): 20,
+    ("companion", "legendary"): 22,
+}
+
+def _effective_unlock_level(character: dict) -> int:
+    """Higher of per-item unlock_level and the rarity/category gate."""
+    cat = character.get("category", "kite")
+    rarity = character.get("rarity", "common")
+    gate = PROGRESSIVE_GATES.get((cat, rarity), 0)
+    return max(int(character.get("unlock_level", 0)), gate)
+
+
 @api_router.get("/characters", response_model=List[Character])
 async def get_characters(category: Optional[str] = None):
-    """Get all available characters, optionally filtered by category"""
+    """Get all available characters, optionally filtered by category.
+    Effective unlock_level reflects progressive rarity gates."""
     query = {} if not category else {"category": category}
     characters = await db.characters.find(query, {"_id": 0}).to_list(200)
-    
+
     if not characters:
         await seed_characters()
         characters = await db.characters.find(query, {"_id": 0}).to_list(200)
-    
+
+    # Augment with effective gate
+    for c in characters:
+        c["unlock_level"] = _effective_unlock_level(c)
     return characters
+
+@api_router.get("/characters/gates")
+async def get_unlock_gates(current_user: User = Depends(get_current_user)):
+    """Return the rarity gate structure so the UI can show 'Unlocks at level N' headers."""
+    gates = [
+        {"category": cat, "rarity": rarity, "unlock_level": lvl,
+         "unlocked": current_user.level >= lvl}
+        for (cat, rarity), lvl in PROGRESSIVE_GATES.items()
+    ]
+    return {"gates": gates, "user_level": current_user.level}
 
 @api_router.post("/characters/equip")
 async def equip_character(
@@ -748,10 +789,11 @@ async def purchase_character(
     if purchase.character_id in owned_list:
         raise HTTPException(status_code=400, detail="Already owned")
 
-    if character.get("unlock_level", 0) > current_user.level:
+    effective_lvl = _effective_unlock_level(character)
+    if effective_lvl > current_user.level:
         raise HTTPException(
             status_code=403,
-            detail=f"Requires level {character['unlock_level']}",
+            detail=f"Requires level {effective_lvl}",
         )
 
     # Server-side authoritative pricing — never trust frontend
