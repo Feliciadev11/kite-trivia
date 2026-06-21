@@ -6,7 +6,7 @@ import { Button } from "../components/ui/button";
 import { Progress } from "../components/ui/progress";
 import { useAuth, API, LoadingKite } from "../App";
 import { toast } from "sonner";
-import { ArrowLeft, Star, Target, Zap, Trophy, Calendar, TrendingUp } from "lucide-react";
+import { ArrowLeft, Star, Target, Zap, Trophy, Calendar, TrendingUp, Sparkles } from "lucide-react";
 import { KiteCharacter } from "../components/KiteCharacter";
 
 export default function ProfilePage() {
@@ -162,6 +162,45 @@ export default function ProfilePage() {
             Get More Characters
           </Button>
         </motion.div>
+
+        {/* Sky Wanderer Milestones */}
+        {data?.unlocked_milestones && data.unlocked_milestones.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.25 }}
+            className="glass-card p-6 mb-6"
+            data-testid="profile-milestones"
+          >
+            <h3 className="font-semibold text-sky-900 mb-4 flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-amber-500" />
+              Sky Wanderer ({data.unlocked_milestones.length})
+            </h3>
+            <div className="flex flex-wrap gap-2">
+              {data.unlocked_milestones.map((m) => {
+                const parts = m.split("_");
+                const lvl = parts[parts.length - 1];
+                const rarity = parts.length === 3 ? parts[1] : parts[2];
+                const cat = parts.length === 3 ? parts[0] : `${parts[0]}_${parts[1]}`;
+                const labels = { kite: "Kites", companion: "Companions", sky_theme: "Skies" };
+                const tints = {
+                  common: "bg-sky-50 text-sky-700 ring-sky-200",
+                  rare: "bg-blue-50 text-blue-700 ring-blue-200",
+                  epic: "bg-violet-50 text-violet-700 ring-violet-200",
+                  legendary: "bg-amber-50 text-amber-700 ring-amber-200",
+                };
+                return (
+                  <span
+                    key={m}
+                    className={`text-xs px-3 py-1.5 rounded-full ring-1 capitalize ${tints[rarity] || tints.common}`}
+                  >
+                    {rarity} {labels[cat] || cat} · L{lvl}
+                  </span>
+                );
+              })}
+            </div>
+          </motion.div>
+        )}
 
         {/* Join Date */}
         <motion.div

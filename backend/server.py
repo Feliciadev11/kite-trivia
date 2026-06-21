@@ -79,6 +79,7 @@ class User(BaseModel):
     last_login_date: Optional[str] = None
     total_rewards_claimed: int = 0
     recently_seen_questions: List[str] = []
+    unlocked_milestones: List[str] = []
 
 class Character(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -654,21 +655,45 @@ async def submit_answer(
     new_xp = current_user.xp + xp_earned
     new_level = current_user.level
     xp_for_next_level = new_level * 100
-    
+
     if new_xp >= xp_for_next_level:
         new_level += 1
         await db.users.update_one(
             {"user_id": current_user.user_id},
             {"$set": {"level": new_level}}
         )
-    
+
+    # Detect any newly-crossed progressive gates between old & new level.
+    # Returned to the frontend so the UI can show a Sky Wanderer celebration.
+    new_milestones: list = []
+    if new_level > current_user.level:
+        crossed = [
+            {"category": cat, "rarity": rarity, "level": lvl}
+            for (cat, rarity), lvl in PROGRESSIVE_GATES.items()
+            if current_user.level < lvl <= new_level
+        ]
+        # Filter against already-recorded milestones (idempotency on retries)
+        already = set(current_user.unlocked_milestones or [])
+        for m in crossed:
+            key = f"{m['category']}_{m['rarity']}_{m['level']}"
+            if key not in already:
+                m["key"] = key
+                new_milestones.append(m)
+
+        if new_milestones:
+            await db.users.update_one(
+                {"user_id": current_user.user_id},
+                {"$addToSet": {"unlocked_milestones": {"$each": [m["key"] for m in new_milestones]}}},
+            )
+
     return {
         "correct": is_correct,
         "correct_answer": question["correct_answer"],
         "xp_earned": xp_earned,
         "new_xp": new_xp,
         "new_level": new_level,
-        "level_up": new_level > current_user.level
+        "level_up": new_level > current_user.level,
+        "new_milestones": new_milestones,
     }
 
 # ==================== CHARACTER ROUTES ====================

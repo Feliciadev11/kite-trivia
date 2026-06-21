@@ -8,6 +8,7 @@ import { useAuth, API, LoadingKite } from "../App";
 import { useAudio } from "../contexts/AudioContext";
 import { toast } from "sonner";
 import { ArrowLeft, ArrowRight, CheckCircle, XCircle, Sparkles, Home } from "lucide-react";
+import { SkyWandererCelebration } from "../components/SkyWandererCelebration";
 
 export default function PlayPage() {
   const navigate = useNavigate();
@@ -21,6 +22,7 @@ export default function PlayPage() {
   const [submitting, setSubmitting] = useState(false);
   const [gameOver, setGameOver] = useState(false);
   const [score, setScore] = useState({ correct: 0, total: 0 });
+  const [milestones, setMilestones] = useState(null);
 
   const fetchQuestions = useCallback(async () => {
     try {
@@ -69,6 +71,11 @@ export default function PlayPage() {
         toast.success(`Level Up! You're now level ${response.data.new_level}!`, {
           icon: <Sparkles className="text-yellow-500" />
         });
+      }
+
+      // Sky Wanderer milestone celebration (if user crossed any progressive gates)
+      if (response.data.new_milestones && response.data.new_milestones.length > 0) {
+        setMilestones(response.data.new_milestones);
       }
     } catch (error) {
       toast.error("Failed to submit answer");
@@ -164,6 +171,12 @@ export default function PlayPage() {
 
   return (
     <div className="min-h-screen sky-gradient" data-testid="play-page">
+      {milestones && (
+        <SkyWandererCelebration
+          milestones={milestones}
+          onDismiss={() => setMilestones(null)}
+        />
+      )}
       {/* Header */}
       <header className="bg-white/80 backdrop-blur-md border-b border-white/50 sticky top-0 z-50">
         <div className="container mx-auto px-4 py-3 flex items-center justify-between">
