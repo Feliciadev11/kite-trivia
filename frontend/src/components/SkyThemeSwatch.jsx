@@ -188,6 +188,123 @@ const PRESETS = {
       </>
     ),
   },
+  // ---- Buyable Seasonal ----
+  spring_bloom: {
+    gradient: "linear-gradient(180deg,#d9f99d 0%,#fbcfe8 50%,#f0fdf4 100%)",
+    signature: (
+      <>
+        <div className="absolute w-5 h-5 rounded-full" style={{ top: "15%", right: "20%", background: "radial-gradient(circle,#fef9c3,transparent)" }} />
+        {[{ l: 20, t: 10 }, { l: 55, t: 30 }, { l: 35, t: 60 }, { l: 75, t: 50 }].map((p, i) => (
+          <motion.div key={i} className="absolute" style={{
+            left: `${p.l}%`, top: `${p.t}%`, width: 5, height: 3.5,
+            background: "radial-gradient(ellipse,#f9a8d4,#fbcfe8)",
+            borderRadius: "60% 20% 60% 20%",
+          }} animate={{ y: [0, 20, 40], rotate: [0, 180, 360], opacity: [0.9, 0.6, 0] }}
+            transition={{ duration: 5, repeat: Infinity, ease: "linear", delay: i * 0.6 }} />
+        ))}
+      </>
+    ),
+  },
+  summer_heatwave: {
+    gradient: "linear-gradient(180deg,#fb923c 0%,#fbbf24 40%,#fef3c7 100%)",
+    signature: (
+      <>
+        <div className="absolute rounded-full" style={{ top: "45%", right: "12%", width: 32, height: 32, background: "radial-gradient(circle,#fef3c7,#fbbf24 50%,#f59e0b 100%)", boxShadow: "0 0 16px #f59e0b" }} />
+        <div className="absolute w-10 h-1 rounded-full bg-orange-200/60" style={{ top: "30%", left: "8%" }} />
+      </>
+    ),
+  },
+  autumn_leaves: {
+    gradient: "linear-gradient(180deg,#b45309 0%,#ea580c 40%,#fdba74 100%)",
+    signature: (
+      <>
+        {[
+          { l: 20, t: 15, d: 0, c: "#ea580c" }, { l: 55, t: 10, d: 1.2, c: "#dc2626" },
+          { l: 35, t: 55, d: 0.7, c: "#d97706" }, { l: 80, t: 35, d: 2.0, c: "#b45309" },
+        ].map((p, i) => (
+          <motion.div key={i} className="absolute" style={{
+            left: `${p.l}%`, top: `${p.t}%`, width: 6, height: 5,
+            background: `radial-gradient(ellipse,${p.c},${p.c}aa)`,
+            borderRadius: "50% 10% 50% 10%",
+          }} animate={{ y: [0, 25, 50], rotate: [0, 200, 400], opacity: [0.9, 0.65, 0] }}
+            transition={{ duration: 6, repeat: Infinity, ease: "linear", delay: p.d }} />
+        ))}
+      </>
+    ),
+  },
+  winter_frost: {
+    gradient: "linear-gradient(180deg,#bae6fd 0%,#e0f2fe 50%,#f8fafc 100%)",
+    signature: (
+      <>
+        <div className="absolute w-7 h-7 rounded-full" style={{ top: "15%", right: "15%", background: "radial-gradient(circle,#fff,#e0f2fe 60%,transparent)", boxShadow: "0 0 12px rgba(186,230,253,0.8)" }} />
+        {[
+          { l: 20, d: 0 }, { l: 40, d: 0.5 }, { l: 60, d: 1.0 }, { l: 80, d: 1.5 },
+        ].map((s, i) => (
+          <motion.div key={i} className="absolute rounded-full bg-white" style={{
+            width: 3, height: 3, left: `${s.l}%`, top: "10%",
+            boxShadow: "0 0 4px rgba(255,255,255,0.9)",
+          }} animate={{ y: [0, 50, 80], opacity: [0.9, 0.5, 0] }}
+            transition={{ duration: 4, repeat: Infinity, ease: "linear", delay: s.d }} />
+        ))}
+      </>
+    ),
+  },
+  // ---- Free Monthly Seasonal ----
+  seasonal_spring: {
+    gradient: "linear-gradient(180deg,#bef264 0%,#fdf2f8 50%,#f0fdf4 100%)",
+    signature: (
+      <>
+        <div className="absolute w-5 h-5 rounded-full" style={{ top: "15%", right: "20%", background: "radial-gradient(circle,#fef9c3,transparent)" }} />
+        {[{ l: 30, t: 25, d: 0 }, { l: 60, t: 50, d: 1 }].map((p, i) => (
+          <motion.div key={i} className="absolute" style={{
+            left: `${p.l}%`, top: `${p.t}%`, width: 5, height: 3.5,
+            background: "radial-gradient(ellipse,#f9a8d4,#fbcfe8)",
+            borderRadius: "60% 20% 60% 20%",
+          }} animate={{ y: [0, 30], rotate: [0, 270], opacity: [0.9, 0] }}
+            transition={{ duration: 5, repeat: Infinity, ease: "linear", delay: p.d }} />
+        ))}
+      </>
+    ),
+  },
+  seasonal_summer: {
+    gradient: "linear-gradient(180deg,#38bdf8 0%,#fef08a 50%,#fde68a 100%)",
+    signature: (
+      <>
+        <div className="absolute rounded-full" style={{ top: "30%", right: "15%", width: 28, height: 28, background: "radial-gradient(circle,#fef3c7,#fde047 50%,#facc15 100%)", boxShadow: "0 0 14px #facc15cc" }} />
+        <div className="absolute w-9 h-1.5 rounded-full bg-white/80" style={{ top: "55%", left: "10%" }} />
+      </>
+    ),
+  },
+  seasonal_autumn: {
+    gradient: "linear-gradient(180deg,#c2410c 0%,#f59e0b 45%,#fde68a 100%)",
+    signature: (
+      <>
+        {[{ l: 30, t: 15, d: 0, c: "#dc2626" }, { l: 60, t: 40, d: 1, c: "#ea580c" }].map((p, i) => (
+          <motion.div key={i} className="absolute" style={{
+            left: `${p.l}%`, top: `${p.t}%`, width: 6, height: 5,
+            background: `radial-gradient(ellipse,${p.c},${p.c}aa)`,
+            borderRadius: "50% 10% 50% 10%",
+          }} animate={{ y: [0, 30], rotate: [0, 320], opacity: [0.9, 0] }}
+            transition={{ duration: 6, repeat: Infinity, ease: "linear", delay: p.d }} />
+        ))}
+      </>
+    ),
+  },
+  seasonal_winter: {
+    gradient: "linear-gradient(180deg,#475569 0%,#94a3b8 45%,#e2e8f0 100%)",
+    signature: (
+      <>
+        <div className="absolute w-6 h-6 rounded-full bg-slate-100" style={{ top: "18%", right: "20%", boxShadow: "0 0 10px rgba(241,245,249,0.5)" }} />
+        <div className="absolute w-6 h-6 rounded-full" style={{ top: "18%", right: "14%", background: "#475569" }} />
+        {[{ l: 25, d: 0 }, { l: 55, d: 0.6 }, { l: 80, d: 1.2 }].map((s, i) => (
+          <motion.div key={i} className="absolute rounded-full bg-white" style={{
+            width: 3, height: 3, left: `${s.l}%`, top: "15%",
+          }} animate={{ y: [0, 50], opacity: [0.9, 0] }}
+            transition={{ duration: 4, repeat: Infinity, ease: "linear", delay: s.d }} />
+        ))}
+      </>
+    ),
+  },
 };
 
 export const SkyThemeSwatch = ({ themeId, size = 80 }) => {

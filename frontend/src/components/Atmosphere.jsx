@@ -196,6 +196,63 @@ const FallingPetals = ({ count = 18 }) => (
   </div>
 );
 
+// Falling leaves (for autumn)
+const FallingLeaves = ({ count = 18 }) => (
+  <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
+    {Array.from({ length: count }).map((_, i) => {
+      const tone = ['#ea580c', '#d97706', '#b45309', '#dc2626', '#a16207'][i % 5];
+      return (
+        <motion.div
+          key={i}
+          className="absolute"
+          style={{ left: `${Math.random() * 100}%`, top: '-30px' }}
+          animate={{
+            y: ['0vh', '110vh'],
+            x: [0, 25, -20, 18, 0],
+            rotate: [0, 220, 440, 660, 880],
+          }}
+          transition={{ duration: 10 + Math.random() * 8, repeat: Infinity, ease: 'linear', delay: Math.random() * 6 }}
+        >
+          <div
+            style={{
+              width: 11, height: 9,
+              background: `radial-gradient(ellipse at 30% 30%, ${tone}, ${tone}aa)`,
+              borderRadius: '50% 10% 50% 10%',
+              opacity: 0.85,
+              filter: `drop-shadow(0 0 3px ${tone}55)`,
+            }}
+          />
+        </motion.div>
+      );
+    })}
+  </div>
+);
+
+// Snowfall (for winter)
+const Snowfall = ({ count = 45 }) => (
+  <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
+    {Array.from({ length: count }).map((_, i) => (
+      <motion.div
+        key={i}
+        className="absolute rounded-full bg-white"
+        style={{
+          width: 2 + Math.random() * 4,
+          height: 2 + Math.random() * 4,
+          left: `${Math.random() * 100}%`,
+          top: '-10px',
+          opacity: 0.85,
+          boxShadow: '0 0 5px rgba(255,255,255,0.7)',
+        }}
+        animate={{
+          y: ['0vh', '110vh'],
+          x: [0, 18, -12, 14, 0],
+        }}
+        transition={{ duration: 8 + Math.random() * 6, repeat: Infinity, ease: 'linear', delay: Math.random() * 5 }}
+      />
+    ))}
+  </div>
+);
+
 // A crescent moon for moonlit
 const CrescentMoon = () => (
   <div className="fixed pointer-events-none z-0" style={{ top: '10%', right: '12%' }}>
@@ -394,6 +451,96 @@ const themeMap = {
         <TwinklingStars count={70} color="#fce7f3" />
         <ShootingStars />
         <FloatingParticles count={18} color="violet" glow />
+      </>
+    ),
+  },
+  // ---- Buyable Seasonal ----
+  spring_bloom: {
+    gradient: 'linear-gradient(180deg, #d9f99d 0%, #fbcfe8 50%, #f0fdf4 100%)',
+    Extras: () => (
+      <>
+        <CelestialDisc color="#fef9c3" glowColor="rgba(254,240,138,0.5)" size={140} top="12%" right="14%" />
+        <FloatingClouds count={3} color="rgba(255,255,255,0.8)" />
+        <FallingPetals count={26} />
+        <FloatingParticles count={14} color="pink" glow />
+      </>
+    ),
+  },
+  summer_heatwave: {
+    gradient: 'linear-gradient(180deg, #fb923c 0%, #fbbf24 40%, #fef3c7 100%)',
+    Extras: () => (
+      <>
+        <CelestialDisc color="#fef3c7" glowColor="rgba(245,158,11,0.8)" size={260} top="42%" right="10%" />
+        <FloatingClouds count={2} color="rgba(254,215,170,0.6)" speed="medium" />
+        <FloatingParticles count={30} color="golden" glow />
+        <WindLines count={4} color="rgba(251,146,60,0.5)" />
+      </>
+    ),
+  },
+  autumn_leaves: {
+    gradient: 'linear-gradient(180deg, #b45309 0%, #ea580c 40%, #fdba74 100%)',
+    Extras: () => (
+      <>
+        <CelestialDisc color="#fed7aa" glowColor="rgba(234,88,12,0.6)" size={170} top="20%" right="12%" />
+        <FloatingClouds count={3} color="rgba(254,215,170,0.5)" />
+        <FallingLeaves count={22} />
+        <WindLines count={3} color="rgba(234,88,12,0.4)" />
+      </>
+    ),
+  },
+  winter_frost: {
+    gradient: 'linear-gradient(180deg, #bae6fd 0%, #e0f2fe 50%, #f8fafc 100%)',
+    Extras: () => (
+      <>
+        <CelestialDisc color="#f1f5f9" glowColor="rgba(186,230,253,0.55)" size={160} top="15%" right="14%" />
+        <FloatingClouds count={4} color="rgba(255,255,255,0.95)" speed="medium" />
+        <Snowfall count={50} />
+        <FloatingParticles count={14} color="blue" glow />
+      </>
+    ),
+  },
+  // ---- Free Monthly Seasonal ----
+  seasonal_spring: {
+    gradient: 'linear-gradient(180deg, #bef264 0%, #fdf2f8 50%, #f0fdf4 100%)',
+    Extras: () => (
+      <>
+        <CelestialDisc color="#fef08a" glowColor="rgba(190,242,100,0.45)" size={150} top="16%" right="14%" />
+        <FloatingClouds count={4} color="rgba(255,255,255,0.85)" />
+        <FallingPetals count={20} />
+        <FloatingParticles count={12} color="mint" glow />
+      </>
+    ),
+  },
+  seasonal_summer: {
+    gradient: 'linear-gradient(180deg, #38bdf8 0%, #fef08a 50%, #fde68a 100%)',
+    Extras: () => (
+      <>
+        <CelestialDisc color="#fef3c7" glowColor="rgba(250,204,21,0.7)" size={210} top="32%" right="10%" />
+        <FloatingClouds count={4} color="rgba(255,255,255,0.9)" speed="medium" />
+        <FloatingParticles count={24} color="golden" glow />
+        <WindLines count={3} color="rgba(56,189,248,0.4)" />
+      </>
+    ),
+  },
+  seasonal_autumn: {
+    gradient: 'linear-gradient(180deg, #c2410c 0%, #f59e0b 45%, #fde68a 100%)',
+    Extras: () => (
+      <>
+        <CelestialDisc color="#fef3c7" glowColor="rgba(245,158,11,0.65)" size={180} top="22%" right="12%" />
+        <FloatingClouds count={3} color="rgba(254,215,170,0.6)" />
+        <FallingLeaves count={18} />
+        <WindLines count={3} color="rgba(217,119,6,0.4)" />
+      </>
+    ),
+  },
+  seasonal_winter: {
+    gradient: 'linear-gradient(180deg, #475569 0%, #94a3b8 45%, #e2e8f0 100%)',
+    Extras: () => (
+      <>
+        <CrescentMoon />
+        <FloatingClouds count={4} color="rgba(241,245,249,0.7)" />
+        <Snowfall count={45} />
+        <FloatingParticles count={10} color="white" glow />
       </>
     ),
   },

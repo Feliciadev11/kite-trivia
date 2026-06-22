@@ -726,17 +726,19 @@ def _effective_unlock_level(character: dict) -> int:
 
 
 @api_router.get("/characters", response_model=List[Character])
-async def get_characters(category: Optional[str] = None):
+async def get_characters(category: Optional[str] = None, include_seasonal_free: bool = False):
     """Get all available characters, optionally filtered by category.
-    Effective unlock_level reflects progressive rarity gates."""
+    Effective unlock_level reflects progressive rarity gates.
+    Free monthly seasonal themes are hidden by default."""
     query = {} if not category else {"category": category}
+    if not include_seasonal_free:
+        query["seasonal_free"] = {"$ne": True}
     characters = await db.characters.find(query, {"_id": 0}).to_list(200)
 
     if not characters:
         await seed_characters()
         characters = await db.characters.find(query, {"_id": 0}).to_list(200)
 
-    # Augment with effective gate
     for c in characters:
         c["unlock_level"] = _effective_unlock_level(c)
     return characters
@@ -802,6 +804,66 @@ async def get_next_unlock(current_user: User = Depends(get_current_user)):
             },
         },
         "user_level": user_level,
+    }
+
+# ==================== SEASONAL SKY ====================
+
+def _current_season() -> dict:
+    """Returns the currently active seasonal theme based on the server month.
+    Mapping: Mar-May → spring, Jun-Aug → summer, Sep-Nov → autumn, Dec-Feb → winter."""
+    m = datetime.now(timezone.utc).month
+    if m in (3, 4, 5):
+        return {"season": "spring", "character_id": "seasonal_spring", "label": "Spring"}
+    if m in (6, 7, 8):
+        return {"season": "summer", "character_id": "seasonal_summer", "label": "Summer"}
+    if m in (9, 10, 11):
+        return {"season": "autumn", "character_id": "seasonal_autumn", "label": "Autumn"}
+    return {"season": "winter", "character_id": "seasonal_winter", "label": "Winter"}
+
+
+@api_router.get("/sky/seasonal")
+async def get_seasonal_sky(current_user: User = Depends(get_current_user)):
+    """Return the currently active free seasonal sky theme."""
+    season = _current_season()
+    character = await db.characters.find_one(
+        {"character_id": season["character_id"]},
+        {"_id": 0},
+    )
+    if not character:
+        return {"season": season, "theme": None, "owned": False}
+
+    owned = season["character_id"] in (current_user.owned_sky_themes or [])
+    return {
+        "season": season["season"],
+        "label": season["label"],
+        "theme": character,
+        "owned": owned,
+        "equipped": current_user.current_sky_theme == season["character_id"],
+    }
+
+
+@api_router.post("/sky/seasonal/claim")
+async def claim_seasonal_sky(current_user: User = Depends(get_current_user)):
+    """Grant the current month's seasonal theme to the user (idempotent)."""
+    season = _current_season()
+    character = await db.characters.find_one(
+        {"character_id": season["character_id"]},
+        {"_id": 0},
+    )
+    if not character:
+        raise HTTPException(status_code=404, detail="Seasonal theme not configured")
+
+    if season["character_id"] not in (current_user.owned_sky_themes or []):
+        await db.users.update_one(
+            {"user_id": current_user.user_id},
+            {"$addToSet": {"owned_sky_themes": season["character_id"]}},
+        )
+
+    return {
+        "granted": True,
+        "character_id": season["character_id"],
+        "season": season["season"],
+        "label": season["label"],
     }
 
 @api_router.post("/characters/equip")
@@ -1285,6 +1347,19 @@ async def seed_characters():
         {"character_id": "aurora_borealis", "name": "Aurora Borealis", "description": "Northern lights dance across the heavens", "price": 7.99, "category": "sky_theme", "rarity": "legendary", "image_url": "sky_aurora", "unlock_level": 9},
         {"character_id": "celestial_night", "name": "Celestial Night", "description": "Deep space with nebulas and distant galaxies", "price": 8.99, "category": "sky_theme", "rarity": "legendary", "image_url": "sky_celestial", "unlock_level": 10},
         {"character_id": "cherry_blossom_sky", "name": "Cherry Blossom Sky", "description": "Petals drift through a pink-hued sky", "price": 8.99, "category": "sky_theme", "rarity": "legendary", "image_url": "sky_sakura", "unlock_level": 11},
+
+        # ---- Buyable Seasonal Themes ----
+        {"character_id": "spring_bloom", "name": "Spring Bloom", "description": "Pastel petals on a soft mint sky", "price": 3.49, "category": "sky_theme", "rarity": "rare", "image_url": "sky_spring", "unlock_level": 4, "seasonal_collection": True},
+        {"character_id": "summer_heatwave", "name": "Summer Heatwave", "description": "Bright coral horizon with sun haze", "price": 3.49, "category": "sky_theme", "rarity": "rare", "image_url": "sky_summer", "unlock_level": 5, "seasonal_collection": True},
+        {"character_id": "autumn_leaves", "name": "Autumn Leaves", "description": "Amber and burgundy with falling leaves", "price": 5.49, "category": "sky_theme", "rarity": "epic", "image_url": "sky_autumn", "unlock_level": 7, "seasonal_collection": True},
+        {"character_id": "winter_frost", "name": "Winter Frost", "description": "Pale silver with delicate snowflakes", "price": 5.49, "category": "sky_theme", "rarity": "epic", "image_url": "sky_winter", "unlock_level": 7, "seasonal_collection": True},
+
+        # ---- Free Monthly Rotating Themes (hidden from main shop) ----
+        # Each is auto-claimable for free during its active season window.
+        {"character_id": "seasonal_spring", "name": "Spring Whisper", "description": "Free this season — a gift from the sky", "price": 0, "category": "sky_theme", "rarity": "common", "image_url": "sky_season_spring", "unlock_level": 0, "seasonal_free": True},
+        {"character_id": "seasonal_summer", "name": "Summer Breeze", "description": "Free this season — a gift from the sky", "price": 0, "category": "sky_theme", "rarity": "common", "image_url": "sky_season_summer", "unlock_level": 0, "seasonal_free": True},
+        {"character_id": "seasonal_autumn", "name": "Autumn Hush", "description": "Free this season — a gift from the sky", "price": 0, "category": "sky_theme", "rarity": "common", "image_url": "sky_season_autumn", "unlock_level": 0, "seasonal_free": True},
+        {"character_id": "seasonal_winter", "name": "Winter Lull", "description": "Free this season — a gift from the sky", "price": 0, "category": "sky_theme", "rarity": "common", "image_url": "sky_season_winter", "unlock_level": 0, "seasonal_free": True},
     ]
     
     for c in characters:
