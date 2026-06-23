@@ -48,6 +48,22 @@ Build a trivia app called Kite with:
 | Shop / Stripe Checkout | Working (Apple Pay, Google Pay, Visa, MC) |
 
 ## What's Been Implemented
+- 2026-02-17 — **Code Review Sweep (Iteration 9)** — addressed all priorities in user's code review:
+  - **P0 SECURITY (HIGH)**: Fixed CORS misconfiguration `allow_origins='*'` + `allow_credentials=True` (CWE-942). `server.py` now uses an env-driven allowlist (`CORS_ORIGINS`) plus a `CORS_ORIGIN_REGEX` for emergent preview domains; wildcard explicitly stripped if present. Backend pytest now includes 4 new CORS hardening tests (32/32 pass total). NOTE: K8s ingress proxy still injects `ACAO: *` on the public preview URL (platform-level, outside app code) — the FastAPI fix is verified correct via localhost:8001.
+  - **P0 React hooks**: Ran ESLint with `react-hooks/exhaustive-deps` at `error` level — **0 missing-deps issues**. The "31 missing deps" claim from the external review tool didn't match canonical React rules; codebase passes cleanly.
+  - **P0 Console statements**: Created `/app/frontend/src/lib/logger.js` (dev-only `logError`/`logWarn` that no-op in production). Replaced all 5 production `console.error` calls in `App.js` (3), `Dashboard.jsx` (1), `Play.jsx` (1).
+  - **P1 Refactor highest-complexity file**: `Shop.jsx` 631 → 189 lines (70% reduction). Extracted 7 focused modules under `/app/frontend/src/pages/shop/`:
+    - `shopConstants.js` (RARITY_GATES, RARITY_COLORS, TAB_CONFIG, sortByRarity)
+    - `useStripeCheckoutPolling.js` (custom hook with cancellation flag, JSDoc-typed)
+    - `ItemCard.jsx` (sub-components: ItemPreview, StatusBadge, ItemAction)
+    - `RaritySection.jsx`
+    - `ShopTabContent.jsx` (one tab body, driven by TAB_CONFIG)
+    - `PurchaseDialog.jsx` (sub-components: PurchasePreview, StatusBlock)
+    - `EquippedSummary.jsx`
+  - **TS coverage**: TS conversion explicitly out-of-scope (codebase is JS, not TS). Added JSDoc `@param` types on all new extracted modules instead.
+  - **Verification (iter 9)**: backend 32/32 pytest PASS, frontend regression PASS (signup → dashboard → shop 3-tab stress → Stripe canceled flow → Stripe success-polling dialog → leaderboard → profile), 0 console errors, 0 key warnings, 0 unstable-nested-components warnings.
+
+
 - 2026-02-17 — **Code Quality Sweep (P0 from user code review)**:
   - Lifted `UnlockPreview` out of `NextUnlockTease` parent (no-unstable-nested-components fix).
   - Removed `<AnimatePresence>` wrapper around 3 unkeyed `<TabsContent>` siblings in `Shop.jsx` — root cause of 8 "two children with same key" warnings (empty-string keys colliding). Each tab's inner `motion.div` now has explicit key.
