@@ -1382,10 +1382,19 @@ async def health():
 # Include the router in the main app
 app.include_router(api_router)
 
+# CORS: never combine "*" with allow_credentials=True (CWE-942).
+# When credentials are enabled, browsers require an explicit origin in
+# Access-Control-Allow-Origin. We honour CORS_ORIGINS as a comma-separated
+# allowlist and use CORS_ORIGIN_REGEX for the emergent preview/prod domains.
+_cors_origins_raw = os.environ.get('CORS_ORIGINS', '').strip()
+_cors_origin_regex = os.environ.get('CORS_ORIGIN_REGEX', r'^https://[a-z0-9-]+\.preview\.emergentagent\.com$')
+_cors_origins = [o.strip() for o in _cors_origins_raw.split(',') if o.strip() and o.strip() != '*']
+
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
+    allow_origins=_cors_origins,
+    allow_origin_regex=_cors_origin_regex,
     allow_methods=["*"],
     allow_headers=["*"],
 )

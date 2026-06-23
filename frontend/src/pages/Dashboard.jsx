@@ -12,6 +12,7 @@ import { AtmosphericBackground } from "../components/Atmosphere";
 import { AudioControl } from "../components/AudioControl";
 import { NextUnlockTease } from "../components/NextUnlockTease";
 import { SeasonalSkyBanner } from "../components/SeasonalSkyBanner";
+import { logError } from "../lib/logger";
 
 export default function DashboardPage() {
   const navigate = useNavigate();
@@ -29,9 +30,7 @@ export default function DashboardPage() {
         const response = await axios.get(`${API}/daily-reward`, { withCredentials: true });
         if (alive) setDailyReward(response.data);
       } catch (error) {
-        if (process.env.NODE_ENV !== "production") {
-          console.error("Failed to fetch daily reward status");
-        }
+        logError("Failed to fetch daily reward status", error);
       }
     };
     fetchDailyReward();

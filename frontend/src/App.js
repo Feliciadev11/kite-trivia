@@ -3,6 +3,7 @@ import "@/App.css";
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom";
 import axios from "axios";
 import { Toaster, toast } from "sonner";
+import { logError } from "./lib/logger";
 
 // Pages
 import { LandingPage } from "./pages/Landing";
@@ -83,7 +84,7 @@ export const AuthProvider = ({ children }) => {
     try {
       await axios.post(`${API}/auth/logout`, {}, { withCredentials: true });
     } catch (e) {
-      console.error("Logout error:", e);
+      logError("Logout error:", e);
     }
     setUser(null);
   };
@@ -93,7 +94,7 @@ export const AuthProvider = ({ children }) => {
       const response = await axios.get(`${API}/auth/me`, { withCredentials: true });
       setUser(response.data);
     } catch (e) {
-      console.error("Refresh error:", e);
+      logError("Refresh error:", e);
     }
   };
 
@@ -131,7 +132,7 @@ const AuthCallback = () => {
           toast.success(`Welcome, ${response.data.name}!`);
           navigate('/dashboard', { replace: true, state: { user: response.data } });
         } catch (error) {
-          console.error("Auth error:", error);
+          logError("Auth error:", error);
           toast.error("Authentication failed");
           navigate('/login', { replace: true });
         }

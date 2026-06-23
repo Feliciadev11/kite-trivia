@@ -9,6 +9,7 @@ import { useAudio } from "../contexts/AudioContext";
 import { toast } from "sonner";
 import { ArrowLeft, ArrowRight, CheckCircle, XCircle, Sparkles, Home } from "lucide-react";
 import { SkyWandererCelebration } from "../components/SkyWandererCelebration";
+import { logError } from "../lib/logger";
 
 export default function PlayPage() {
   const navigate = useNavigate();
@@ -33,9 +34,7 @@ export default function PlayPage() {
       setQuestions(response.data);
     } catch (error) {
       toast.error("Failed to load questions");
-      if (process.env.NODE_ENV !== "production") {
-        console.error(error);
-      }
+      logError("fetchQuestions failed", error);
     } finally {
       setLoading(false);
     }

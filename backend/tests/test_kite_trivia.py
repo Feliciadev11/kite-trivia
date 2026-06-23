@@ -450,3 +450,51 @@ def test_stripe_webhook_endpoint_exists():
     # Endpoint exists -> not 404/405. Invalid sig -> 400 (per handler). Some integrations may 500.
     assert r.status_code not in (404, 405), f"webhook missing: {r.status_code}"
     assert r.status_code in (400, 401, 422, 500), f"unexpected: {r.status_code} {r.text}"
+
+
+
+# --- CORS hardening (iter 9) — must hit FastAPI directly (localhost) so the K8s
+# ingress (which adds wildcard CORS headers of its own) does not mask the result.
+LOCAL_API = "http://localhost:8001/api"
+
+
+def _get_acao(headers):
+    """Return ACAO header (case-insensitive) or None."""
+    for k, v in headers.items():
+        if k.lower() == "access-control-allow-origin":
+            return v
+    return None
+
+
+def test_cors_blocks_evil_origin():
+    """Evil origin must NOT receive Access-Control-Allow-Origin header from FastAPI."""
+    r = requests.get(f"{LOCAL_API}/health",
+                     headers={"Origin": "https://evil.example.com"})
+    assert r.status_code == 200
+    assert _get_acao(r.headers) is None, (
+        f"Evil origin must NOT get ACAO. Got: {_get_acao(r.headers)}"
+    )
+
+
+def test_cors_allows_configured_origin():
+    """The configured CORS_ORIGINS entry must be echoed back exactly."""
+    origin = "https://kite-trivia-quest.preview.emergentagent.com"
+    r = requests.get(f"{LOCAL_API}/health", headers={"Origin": origin})
+    assert r.status_code == 200
+    assert _get_acao(r.headers) == origin
+
+
+def test_cors_allows_preview_regex_origin():
+    """Arbitrary *.preview.emergentagent.com origin must match the regex."""
+    origin = "https://another-preview-app.preview.emergentagent.com"
+    r = requests.get(f"{LOCAL_API}/health", headers={"Origin": origin})
+    assert r.status_code == 200
+    assert _get_acao(r.headers) == origin
+
+
+def test_cors_blocks_subdomain_attack():
+    """A domain that contains the suffix as a non-tail substring must be rejected."""
+    r = requests.get(f"{LOCAL_API}/health",
+                     headers={"Origin": "https://evil.preview.emergentagent.com.attacker.com"})
+    assert r.status_code == 200
+    assert _get_acao(r.headers) is None
