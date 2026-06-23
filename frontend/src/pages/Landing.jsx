@@ -101,9 +101,9 @@ export default function LandingPage() {
                 { icon: Sparkles, text: "Cute Characters" },
                 { icon: Trophy, text: "Weekly Leaderboard" },
                 { icon: ShoppingBag, text: "Character Shop" },
-              ].map((item, i) => (
+              ].map((item) => (
                 <span
-                  key={i}
+                  key={item.text}
                   className="inline-flex items-center gap-2 px-4 py-2 bg-white/70 backdrop-blur-sm rounded-full text-sky-700 text-sm font-medium shadow-sm"
                 >
                   <item.icon className="w-4 h-4" />

@@ -20,6 +20,30 @@ const RARITY_ACCENT = {
   legendary: { ring: "ring-amber-200", text: "text-amber-700", glow: "rgba(245,158,11,0.5)" },
 };
 
+// Defined outside parent to prevent React from destroying/recreating the
+// preview subtree on each parent re-render (no-unstable-nested-components).
+const UnlockPreview = ({ category, characterId, rarity }) => {
+  if (category === "companion") {
+    return (
+      <div className="grayscale opacity-60">
+        <CompanionCharacter companionId={characterId} size="medium" />
+      </div>
+    );
+  }
+  if (category === "sky_theme") {
+    return (
+      <div className="opacity-70">
+        <SkyThemeSwatch themeId={characterId} size={72} />
+      </div>
+    );
+  }
+  return (
+    <div className="grayscale opacity-60">
+      <KiteCharacter characterId={characterId} size="small" rarity={rarity} />
+    </div>
+  );
+};
+
 export const NextUnlockTease = () => {
   const navigate = useNavigate();
   const [data, setData] = useState(null);
@@ -46,28 +70,8 @@ export const NextUnlockTease = () => {
   const { sample_item, rarity, unlock_level, levels_remaining, category } = next_unlock;
   const accent = RARITY_ACCENT[rarity] || RARITY_ACCENT.common;
 
-  // Build a silhouette/preview for the upcoming item
-  const Preview = () => {
-    if (category === "companion") {
-      return (
-        <div className="grayscale opacity-60">
-          <CompanionCharacter companionId={sample_item.character_id} size="medium" />
-        </div>
-      );
-    }
-    if (category === "sky_theme") {
-      return (
-        <div className="opacity-70">
-          <SkyThemeSwatch themeId={sample_item.character_id} size={72} />
-        </div>
-      );
-    }
-    return (
-      <div className="grayscale opacity-60">
-        <KiteCharacter characterId={sample_item.character_id} size="small" rarity={rarity} />
-      </div>
-    );
-  };
+  // Use the lifted UnlockPreview component (declared outside this function)
+  // so React doesn't unmount and remount the preview on every parent render.
 
   return (
     <AnimatePresence>
@@ -89,7 +93,11 @@ export const NextUnlockTease = () => {
               animate={{ y: [0, -3, 0] }}
               transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
             >
-              <Preview />
+              <UnlockPreview
+                category={category}
+                characterId={sample_item.character_id}
+                rarity={rarity}
+              />
             </motion.div>
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="w-9 h-9 rounded-full bg-white/80 backdrop-blur-sm flex items-center justify-center shadow-sm">

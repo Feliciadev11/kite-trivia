@@ -16,17 +16,19 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let alive = true;
     const fetchProfile = async () => {
       try {
         const response = await axios.get(`${API}/profile`, { withCredentials: true });
-        setProfile(response.data);
+        if (alive) setProfile(response.data);
       } catch (error) {
-        toast.error("Failed to load profile");
+        if (alive) toast.error("Failed to load profile");
       } finally {
-        setLoading(false);
+        if (alive) setLoading(false);
       }
     };
     fetchProfile();
+    return () => { alive = false; };
   }, []);
 
   if (loading) {

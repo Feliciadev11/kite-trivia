@@ -1,0 +1,58 @@
+{
+  "summary": "Iteration 7 regression of React code-quality fixes (lifted UnlockPreview, stable keys in Atmosphere/SkyThemeSwatch/Landing/SkyWandererCelebration/Shop, useRef pattern in Shop, alive cleanup in Profile/Leaderboard/Dashboard). Backend pytest 28/28 PASS (no backend changes). React 'no-unstable-nested-components' warnings: 0 (FIXED — UnlockPreview lifted out of NextUnlockTease). React 'each child in a list should have a unique key' warnings: 8 still observed on first authenticated render of /dashboard (4) and /shop after clicking kite/companion tabs (4) — not fully eliminated. Code review confirms Atmosphere.jsx and SkyThemeSwatch.jsx use stable namespaced/composite keys correctly; remaining duplicate-key warnings appear to come from a different source (possibly carry-over duplicate whim_* question_ids in /app/backend/questions_db.py surfacing through prefetched dashboard data, or an unaudited list render in Dashboard/NextUnlockTease/SeasonalSkyBanner). Splash overlay (sky-splash-begin-btn) intercepts clicks on first session — must be tapped before form interaction.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "questions DB", "issue": "Carry-over from iter_5/6: 30 duplicate question_ids (whim_1..whim_15 duplicated) in /app/backend/questions_db.py. Likely contributes to remaining duplicate-key React warnings on /play (and possibly dashboard if any pre-fetch happens)."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Unknown (Dashboard subtree)", "issue": "4 'Encountered two children with the same key' React errors fire on first /dashboard render after signup, before /play is visited. The user-listed files (Atmosphere/SkyThemeSwatch/Landing/SkyWandererCelebration) have been audited and now use stable keys — the source is elsewhere. Suspects: NextUnlockTease, SeasonalSkyBanner, Dashboard.jsx character list, or a hidden Shop preload. Need to instrument with a React error boundary or temporarily disable each child component to isolate.", "selector": "console.error", "priority": "MEDIUM"},
+      {"component": "Shop tabs (kite, companion)", "issue": "4 additional 'two children with the same key' errors fire after clicking shop-tab-kite and shop-tab-companion. Shop.jsx maps use key={item.character_id} — if /api/characters returns characters with duplicate character_id (level-locked vs visible duplicates), keys collide. Recommend deduping by id OR composite key like `${item.character_id}-${section}`.", "selector": "[data-testid^='shop-tab-']", "priority": "MEDIUM"},
+      {"component": "SkySplash overlay", "issue": "Splash overlay (sky-splash-begin-btn) blocks all click interactions until tapped, even on /signup. Automated tests and direct deep-links to /signup that don't first tap the splash fail silently — the submit-button click is consumed by the overlay (no /api/auth/register request leaves the browser). Consider auto-dismissing splash on routes !== '/' or marking it pointer-events:none on form pages.", "selector": "[data-testid='sky-splash-begin-btn']", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_tests": [
+    "Backend pytest 28/28 PASS (auth, questions, scoring, leaderboard, characters, daily reward, forgot/reset password, Stripe checkout URL flow)",
+    "Frontend: React 'no-unstable-nested-components' warning count = 0 across landing/signup/dashboard/shop/profile/leaderboard/play/forgot-password (HIGH-SEVERITY FIX VERIFIED — UnlockPreview lifted outside NextUnlockTease)",
+    "Frontend: Landing → tap splash → /signup → fill name/email/password → submit → redirect to /dashboard works end-to-end (verified in first run with email TEST_kite_<ts>@example.com / DreamySky123!)",
+    "Frontend: Dashboard renders Hey/Welcome heading, Daily Reward card, Next Unlock card, Seasonal Sky Banner (Summer Breeze), Basic Kite character, Level 1 XP bar (0/100), Correct/Played/Weekly Score tiles — visual layout intact",
+    "Frontend: Atmosphere.jsx — namespaced keys (cloud-${i}, particle-${i}, star-${i}, wind-${i}, rain-${i}, petal-${i}, leaf-${i}, snow-${i}, nebula-${i}, shooting-${i}, AuroraRibbons key={c}) confirmed in source",
+    "Frontend: SkyThemeSwatch.jsx — composite coordinate keys (star-${t}-${l}, blossom-${l}-${t}, spring-${l}-${t}, etc.) confirmed in source for all 18 presets",
+    "Frontend: NextUnlockTease.jsx — UnlockPreview declared at module scope (line 25), used at line 96 — no nested component recreation",
+    "Frontend: Landing.jsx feature pills use key={item.text} (line 106)",
+    "Frontend: Forgot-password page /forgot-password loads and renders email input + 'Get reset code' button"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_kite_trivia.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "(MEDIUM) Investigate 4 'two children with the same key' React errors that fire on first /dashboard render. Likely sources: NextUnlockTease tease list, SeasonalSkyBanner offerings, or Dashboard character_grid. Add a temporary `console.error` patcher with stack capture in dev mode to localize.",
+    "(MEDIUM) Shop kite/companion tabs trigger 4 more duplicate-key warnings. Dedupe items by character_id in Shop.jsx OR use composite key `${item.character_id}-${item.rarity}` to make collisions impossible.",
+    "(LOW carry-over) Fix duplicate whim_* question_ids in /app/backend/questions_db.py (30 dupes → 15 unique).",
+    "(LOW) SkySplash overlay should not capture clicks on auth pages (/login, /signup, /forgot-password). Either auto-dismiss on these routes or set pointer-events:none."
+  ],
+  "critical_code_review_comments": [
+    "NextUnlockTease.jsx: UnlockPreview is now defined at module scope (line 25) and consumed at line 96 — react/no-unstable-nested-components issue is genuinely fixed. No regression detected.",
+    "Atmosphere.jsx: All 9 internal Array.from maps use stable namespaced keys (cloud-${i}, particle-${i}, etc.). AuroraRibbons uses key={c} which is fine since colors are unique. Only minor: ShootingStars uses [0,1].map((i)) with key=`shooting-${i}` — fine.",
+    "SkyThemeSwatch.jsx: All 12 PRESET signature lists use composite coordinate keys (e.g., `star-${s.t}-${s.l}`, `blossom-${p.l}-${p.t}`, `frost-${s.l}`) — collision-safe within each preset. data-testid=`sky-swatch-${themeId}` continues to work.",
+    "Shop.jsx: Three section maps at lines 277/322/367 all use key={item.character_id}. If /api/characters ever returns two items with the same character_id (e.g., same item appearing in two rarity sections), keys collide. Suggested fix: key={`${item.character_id}-${index}`} OR key={`${item.character_id}-${item.rarity}`}.",
+    "Profile.jsx + Leaderboard.jsx + Dashboard.jsx: Async useEffect 'alive' cleanup pattern is implemented correctly — prevents setState-on-unmounted warning. Verified by walking through code; cannot trigger the warning by rapid navigation.",
+    "SkySplash overlay z-index covers /signup form on cold-load — automated test submit clicks are consumed silently (no /api/auth/register network call). Manual users tap to dismiss naturally so they don't see this, but it's a footgun for automated tests and deep links."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "100% (28/28 pytest)",
+    "frontend": "80% — unstable-nested-components FIXED (HIGH severity user concern resolved). Stable-keys fix in the 4 named components is verified in source, but 8 duplicate-key warnings still leak from un-audited render paths (4 on /dashboard load, 4 across shop kite/companion tabs). Full regression of auth/dashboard/shop/leaderboard/profile/forgot-password visual flow PASSES."
+  },
+  "test_credentials": "Ephemeral via /api/auth/register: TEST_kite_<ts>@example.com / DreamySky123!",
+  "seed_data_creation": "One ephemeral user per run via register.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Backend unchanged — pytest 28/28 stays green. React 'no-unstable-nested-components' warning is RESOLVED. The remaining 'unique key' warnings (8 total on dashboard+shop) need root-cause analysis: instrument console.error with stack capture OR temporarily comment out NextUnlockTease/SeasonalSkyBanner/Dashboard character grid to isolate. Shop.jsx uses key={item.character_id} which is the most-likely culprit if /api/characters ever returns id duplicates across rarity sections — quickest fix is composite key `${id}-${index}`. SkySplash overlay (sky-splash-begin-btn) intercepts clicks on the first load of /signup — tap it BEFORE filling forms. Use data-testid name-input/email-input/password-input/signup-submit-btn. Dashboard testids confirmed missing: dashboard-play-btn, dashboard-next-unlock, dashboard-seasonal-banner, dashboard-weekly-score, dashboard-xp-progress — these labels are visible in the UI text but don't have testids. Adding them would help future automation.",
+  "rca of the issue": "RCA — unstable-nested-components (HIGH): root cause was UnlockPreview being declared inside NextUnlockTease's body, recreating the component identity on every parent render. Fix lifted UnlockPreview to module scope. VERIFIED: 0 such warnings across full navigation. RCA — duplicate keys (MEDIUM, partial): user's fix correctly stabilized keys in Atmosphere/SkyThemeSwatch/Landing/SkyWandererCelebration (all confirmed by source-grep), but 8 duplicate-key warnings persist on first /dashboard render (4) and shop kite/companion tabs (4). Most-likely culprit: Shop.jsx three section maps using bare key={item.character_id} — if backend returns the same character_id in multiple rarity sections (visible + locked-tease), keys collide. Mitigation: composite key `${item.character_id}-${section}-${index}`. Dashboard-side 4 warnings need stack-capture instrumentation to locate."
+}

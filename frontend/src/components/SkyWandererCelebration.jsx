@@ -34,7 +34,7 @@ const PetalConfetti = ({ count = 18 }) => (
       const color = ["#fbcfe8", "#bfdbfe", "#fde68a", "#ddd6fe", "#fed7aa"][i % 5];
       return (
         <motion.div
-          key={i}
+          key={`confetti-petal-${i}`}
           className="absolute pointer-events-none"
           style={{
             left: `${left}%`,

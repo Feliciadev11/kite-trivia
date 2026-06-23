@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import axios from "axios";
@@ -55,6 +55,13 @@ export default function ShopPage() {
     loadCharacters();
   }, [loadCharacters]);
 
+  // Stable refs to avoid re-running the polling effect when context callbacks
+  // re-create on each render (refreshUser is not memoized by AuthProvider).
+  const refreshUserRef = useRef(refreshUser);
+  const loadCharactersRef = useRef(loadCharacters);
+  useEffect(() => { refreshUserRef.current = refreshUser; }, [refreshUser]);
+  useEffect(() => { loadCharactersRef.current = loadCharacters; }, [loadCharacters]);
+
   // Stripe polling on return from Checkout
   useEffect(() => {
     const sessionId = searchParams.get('session_id');
@@ -78,8 +85,8 @@ export default function ShopPage() {
         if (data.payment_status === 'paid' || data.granted) {
           setPaymentStatus('paid');
           toast.success("Item unlocked — welcome to your new sky!");
-          await refreshUser();
-          await loadCharacters();
+          await refreshUserRef.current();
+          await loadCharactersRef.current();
           setTimeout(() => {
             setPurchaseDialog(false);
             setPaymentStatus(null);
@@ -105,8 +112,7 @@ export default function ShopPage() {
       }
     };
     poll();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams]);
+  }, [searchParams, setSearchParams]);
 
   const handleEquip = async (characterId, type = 'kite') => {
     try {
@@ -442,7 +448,7 @@ export default function ShopPage() {
             {paymentStatus === 'failed' && (
               <div className="flex flex-col items-center gap-3 text-amber-600" data-testid="purchase-status-failed">
                 <Sparkles className="w-8 h-8" />
-                <p className="text-sm">Something didn't go through. Please try again.</p>
+                <p className="text-sm">Something didn&apos;t go through. Please try again.</p>
               </div>
             )}
           </div>

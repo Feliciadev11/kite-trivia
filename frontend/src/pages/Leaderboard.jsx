@@ -16,21 +16,25 @@ export default function LeaderboardPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let alive = true;
     const fetchData = async () => {
       try {
         const [leaderboardRes, rankRes] = await Promise.all([
           axios.get(`${API}/leaderboard`, { withCredentials: true }),
           axios.get(`${API}/leaderboard/my-rank`, { withCredentials: true })
         ]);
-        setLeaderboard(leaderboardRes.data);
-        setMyRank(rankRes.data);
+        if (alive) {
+          setLeaderboard(leaderboardRes.data);
+          setMyRank(rankRes.data);
+        }
       } catch (error) {
-        toast.error("Failed to load leaderboard");
+        if (alive) toast.error("Failed to load leaderboard");
       } finally {
-        setLoading(false);
+        if (alive) setLoading(false);
       }
     };
     fetchData();
+    return () => { alive = false; };
   }, []);
 
   const getRankIcon = (rank) => {

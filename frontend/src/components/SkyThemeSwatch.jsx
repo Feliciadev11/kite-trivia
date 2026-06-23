@@ -74,8 +74,8 @@ const PRESETS = {
           { t: 15, l: 20 }, { t: 25, l: 50 }, { t: 35, l: 75 },
           { t: 18, l: 85 }, { t: 50, l: 30 }, { t: 60, l: 60 },
           { t: 45, l: 12 }, { t: 70, l: 80 },
-        ].map((s, i) => (
-          <div key={i} className="absolute w-0.5 h-0.5 rounded-full bg-white"
+        ].map((s) => (
+          <div key={`star-${s.t}-${s.l}`} className="absolute w-0.5 h-0.5 rounded-full bg-white"
             style={{ top: `${s.t}%`, left: `${s.l}%`, boxShadow: "0 0 3px #fff" }} />
         ))}
       </>
@@ -89,8 +89,8 @@ const PRESETS = {
           style={{ top: "20%", right: "20%", boxShadow: "0 0 12px rgba(241,245,249,0.4)" }} />
         <div className="absolute w-7 h-7 rounded-full"
           style={{ top: "20%", right: "13%", background: "#1e293b" }} />
-        {[{ t: 35, l: 15 }, { t: 50, l: 65 }, { t: 65, l: 30 }].map((s, i) => (
-          <div key={i} className="absolute w-0.5 h-0.5 rounded-full bg-slate-200"
+        {[{ t: 35, l: 15 }, { t: 50, l: 65 }, { t: 65, l: 30 }].map((s) => (
+          <div key={`moon-star-${s.t}-${s.l}`} className="absolute w-0.5 h-0.5 rounded-full bg-slate-200"
             style={{ top: `${s.t}%`, left: `${s.l}%` }} />
         ))}
       </>
@@ -105,9 +105,9 @@ const PRESETS = {
         {[
           { l: 20, d: 0 }, { l: 35, d: 0.2 }, { l: 55, d: 0.1 },
           { l: 70, d: 0.3 }, { l: 85, d: 0 },
-        ].map((r, i) => (
+        ].map((r) => (
           <motion.div
-            key={i}
+            key={`rain-${r.l}`}
             className="absolute w-px bg-sky-100"
             style={{ height: 10, left: `${r.l}%`, top: "30%" }}
             animate={{ y: [0, 40], opacity: [0.9, 0] }}
@@ -154,8 +154,8 @@ const PRESETS = {
           style={{ width: 40, height: 40, top: "25%", left: "55%", background: "radial-gradient(circle,#a855f7aa,transparent 70%)", filter: "blur(6px)" }} />
         <div className="absolute rounded-full"
           style={{ width: 28, height: 28, top: "55%", left: "20%", background: "radial-gradient(circle,#ec489988,transparent 70%)", filter: "blur(4px)" }} />
-        {[{ t: 18, l: 20 }, { t: 35, l: 80 }, { t: 70, l: 50 }].map((s, i) => (
-          <div key={i} className="absolute w-0.5 h-0.5 rounded-full bg-pink-100"
+        {[{ t: 18, l: 20 }, { t: 35, l: 80 }, { t: 70, l: 50 }].map((s) => (
+          <div key={`celestial-star-${s.t}-${s.l}`} className="absolute w-0.5 h-0.5 rounded-full bg-pink-100"
             style={{ top: `${s.t}%`, left: `${s.l}%`, boxShadow: "0 0 3px #fce7f3" }} />
         ))}
       </>
@@ -170,9 +170,9 @@ const PRESETS = {
         {[
           { l: 25, t: 15, d: 0 }, { l: 60, t: 10, d: 1.5 },
           { l: 40, t: 60, d: 0.8 }, { l: 80, t: 35, d: 2.2 },
-        ].map((p, i) => (
+        ].map((p) => (
           <motion.div
-            key={i}
+            key={`blossom-${p.l}-${p.t}`}
             className="absolute"
             style={{
               left: `${p.l}%`, top: `${p.t}%`,
@@ -195,7 +195,7 @@ const PRESETS = {
       <>
         <div className="absolute w-5 h-5 rounded-full" style={{ top: "15%", right: "20%", background: "radial-gradient(circle,#fef9c3,transparent)" }} />
         {[{ l: 20, t: 10 }, { l: 55, t: 30 }, { l: 35, t: 60 }, { l: 75, t: 50 }].map((p, i) => (
-          <motion.div key={i} className="absolute" style={{
+          <motion.div key={`spring-${p.l}-${p.t}`} className="absolute" style={{
             left: `${p.l}%`, top: `${p.t}%`, width: 5, height: 3.5,
             background: "radial-gradient(ellipse,#f9a8d4,#fbcfe8)",
             borderRadius: "60% 20% 60% 20%",
@@ -221,8 +221,8 @@ const PRESETS = {
         {[
           { l: 20, t: 15, d: 0, c: "#ea580c" }, { l: 55, t: 10, d: 1.2, c: "#dc2626" },
           { l: 35, t: 55, d: 0.7, c: "#d97706" }, { l: 80, t: 35, d: 2.0, c: "#b45309" },
-        ].map((p, i) => (
-          <motion.div key={i} className="absolute" style={{
+        ].map((p) => (
+          <motion.div key={`autumn-${p.l}-${p.t}`} className="absolute" style={{
             left: `${p.l}%`, top: `${p.t}%`, width: 6, height: 5,
             background: `radial-gradient(ellipse,${p.c},${p.c}aa)`,
             borderRadius: "50% 10% 50% 10%",
@@ -239,8 +239,8 @@ const PRESETS = {
         <div className="absolute w-7 h-7 rounded-full" style={{ top: "15%", right: "15%", background: "radial-gradient(circle,#fff,#e0f2fe 60%,transparent)", boxShadow: "0 0 12px rgba(186,230,253,0.8)" }} />
         {[
           { l: 20, d: 0 }, { l: 40, d: 0.5 }, { l: 60, d: 1.0 }, { l: 80, d: 1.5 },
-        ].map((s, i) => (
-          <motion.div key={i} className="absolute rounded-full bg-white" style={{
+        ].map((s) => (
+          <motion.div key={`frost-${s.l}`} className="absolute rounded-full bg-white" style={{
             width: 3, height: 3, left: `${s.l}%`, top: "10%",
             boxShadow: "0 0 4px rgba(255,255,255,0.9)",
           }} animate={{ y: [0, 50, 80], opacity: [0.9, 0.5, 0] }}
@@ -255,8 +255,8 @@ const PRESETS = {
     signature: (
       <>
         <div className="absolute w-5 h-5 rounded-full" style={{ top: "15%", right: "20%", background: "radial-gradient(circle,#fef9c3,transparent)" }} />
-        {[{ l: 30, t: 25, d: 0 }, { l: 60, t: 50, d: 1 }].map((p, i) => (
-          <motion.div key={i} className="absolute" style={{
+        {[{ l: 30, t: 25, d: 0 }, { l: 60, t: 50, d: 1 }].map((p) => (
+          <motion.div key={`seasonal-spring-${p.l}-${p.t}`} className="absolute" style={{
             left: `${p.l}%`, top: `${p.t}%`, width: 5, height: 3.5,
             background: "radial-gradient(ellipse,#f9a8d4,#fbcfe8)",
             borderRadius: "60% 20% 60% 20%",
@@ -279,8 +279,8 @@ const PRESETS = {
     gradient: "linear-gradient(180deg,#c2410c 0%,#f59e0b 45%,#fde68a 100%)",
     signature: (
       <>
-        {[{ l: 30, t: 15, d: 0, c: "#dc2626" }, { l: 60, t: 40, d: 1, c: "#ea580c" }].map((p, i) => (
-          <motion.div key={i} className="absolute" style={{
+        {[{ l: 30, t: 15, d: 0, c: "#dc2626" }, { l: 60, t: 40, d: 1, c: "#ea580c" }].map((p) => (
+          <motion.div key={`seasonal-autumn-${p.l}-${p.t}`} className="absolute" style={{
             left: `${p.l}%`, top: `${p.t}%`, width: 6, height: 5,
             background: `radial-gradient(ellipse,${p.c},${p.c}aa)`,
             borderRadius: "50% 10% 50% 10%",
@@ -296,8 +296,8 @@ const PRESETS = {
       <>
         <div className="absolute w-6 h-6 rounded-full bg-slate-100" style={{ top: "18%", right: "20%", boxShadow: "0 0 10px rgba(241,245,249,0.5)" }} />
         <div className="absolute w-6 h-6 rounded-full" style={{ top: "18%", right: "14%", background: "#475569" }} />
-        {[{ l: 25, d: 0 }, { l: 55, d: 0.6 }, { l: 80, d: 1.2 }].map((s, i) => (
-          <motion.div key={i} className="absolute rounded-full bg-white" style={{
+        {[{ l: 25, d: 0 }, { l: 55, d: 0.6 }, { l: 80, d: 1.2 }].map((s) => (
+          <motion.div key={`seasonal-winter-${s.l}`} className="absolute rounded-full bg-white" style={{
             width: 3, height: 3, left: `${s.l}%`, top: "15%",
           }} animate={{ y: [0, 50], opacity: [0.9, 0] }}
             transition={{ duration: 4, repeat: Infinity, ease: "linear", delay: s.d }} />

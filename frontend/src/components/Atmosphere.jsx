@@ -8,7 +8,7 @@ export const FloatingClouds = ({ count = 5, color = 'rgba(255,255,255,0.55)', sp
     <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
       {Array.from({ length: count }).map((_, i) => (
         <motion.div
-          key={i}
+          key={`cloud-${i}`}
           className="absolute"
           style={{ top: `${10 + (i * 15) % 60}%`, left: '-20%' }}
           animate={{ x: ['0vw', '140vw'] }}
@@ -40,7 +40,7 @@ export const FloatingParticles = ({ count = 20, color = 'white', glow = false })
         'rgba(255,255,255,0.7)';
       return (
         <motion.div
-          key={i}
+          key={`particle-${i}`}
           className="absolute rounded-full"
           style={{
             width: `${2 + Math.random() * 4}px`,
@@ -67,7 +67,7 @@ export const TwinklingStars = ({ count = 30, color = '#ffffff' }) => (
   <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
     {Array.from({ length: count }).map((_, i) => (
       <motion.div
-        key={i}
+        key={`star-${i}`}
         className="absolute rounded-full"
         style={{
           width: `${1 + Math.random() * 2}px`,
@@ -88,7 +88,7 @@ export const WindLines = ({ count = 3, color = 'rgba(125,211,252,0.35)' }) => (
   <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
     {Array.from({ length: count }).map((_, i) => (
       <motion.div
-        key={i}
+        key={`wind-${i}`}
         className="absolute h-px"
         style={{
           width: `${100 + Math.random() * 200}px`,
@@ -150,7 +150,7 @@ const RainStreaks = ({ count = 40 }) => (
   <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
     {Array.from({ length: count }).map((_, i) => (
       <motion.div
-        key={i}
+        key={`rain-${i}`}
         className="absolute"
         style={{
           width: '1px',
@@ -171,7 +171,7 @@ const FallingPetals = ({ count = 18 }) => (
   <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
     {Array.from({ length: count }).map((_, i) => (
       <motion.div
-        key={i}
+        key={`petal-${i}`}
         className="absolute"
         style={{ left: `${Math.random() * 100}%`, top: '-30px' }}
         animate={{
@@ -203,7 +203,7 @@ const FallingLeaves = ({ count = 18 }) => (
       const tone = ['#ea580c', '#d97706', '#b45309', '#dc2626', '#a16207'][i % 5];
       return (
         <motion.div
-          key={i}
+          key={`leaf-${i}`}
           className="absolute"
           style={{ left: `${Math.random() * 100}%`, top: '-30px' }}
           animate={{
@@ -233,7 +233,7 @@ const Snowfall = ({ count = 45 }) => (
   <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
     {Array.from({ length: count }).map((_, i) => (
       <motion.div
-        key={i}
+        key={`snow-${i}`}
         className="absolute rounded-full bg-white"
         style={{
           width: 2 + Math.random() * 4,
@@ -291,7 +291,7 @@ const NebulaClouds = () => (
       { color: 'rgba(14,165,233,0.3)', top: '15%', left: '20%', size: 260 },
     ].map((n, i) => (
       <motion.div
-        key={i}
+        key={`nebula-${i}`}
         className="absolute rounded-full"
         style={{
           width: n.size,
@@ -313,7 +313,7 @@ const ShootingStars = () => (
   <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
     {[0, 1].map((i) => (
       <motion.div
-        key={i}
+        key={`shooting-${i}`}
         className="absolute"
         style={{ top: `${15 + i * 30}%`, left: '-10%', width: 140, height: 1 }}
         animate={{ x: ['0vw', '120vw'], opacity: [0, 1, 0] }}

@@ -23,17 +23,19 @@ export default function DashboardPage() {
   const xpProgress = ((user?.xp || 0) / xpForNextLevel) * 100;
 
   useEffect(() => {
+    let alive = true;
     const fetchDailyReward = async () => {
       try {
         const response = await axios.get(`${API}/daily-reward`, { withCredentials: true });
-        setDailyReward(response.data);
+        if (alive) setDailyReward(response.data);
       } catch (error) {
-      if (process.env.NODE_ENV !== "production") {
-        console.error("Failed to fetch daily reward status");
-      }
+        if (process.env.NODE_ENV !== "production") {
+          console.error("Failed to fetch daily reward status");
+        }
       }
     };
     fetchDailyReward();
+    return () => { alive = false; };
   }, []);
 
   const handleClaimReward = async () => {
