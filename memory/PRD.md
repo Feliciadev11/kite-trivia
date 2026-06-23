@@ -48,6 +48,16 @@ Build a trivia app called Kite with:
 | Shop / Stripe Checkout | Working (Apple Pay, Google Pay, Visa, MC) |
 
 ## What's Been Implemented
+- 2026-02-17 — **Code Quality Sweep (P0 from user code review)**:
+  - Lifted `UnlockPreview` out of `NextUnlockTease` parent (no-unstable-nested-components fix).
+  - Removed `<AnimatePresence>` wrapper around 3 unkeyed `<TabsContent>` siblings in `Shop.jsx` — root cause of 8 "two children with same key" warnings (empty-string keys colliding). Each tab's inner `motion.div` now has explicit key.
+  - Replaced all `key={index}` with stable namespaced keys in `Atmosphere.jsx` (cloud-, particle-, star-, wind-, rain-, petal-, leaf-, snow-, nebula-, shooting-) and composite coordinate keys in `SkyThemeSwatch.jsx`.
+  - `SkyWandererCelebration.jsx` confetti uses `confetti-petal-${i}`; `Landing.jsx` feature pills key off `.text`.
+  - `Profile/Leaderboard/Dashboard` async useEffects now use `alive` cancellation flag pattern.
+  - `Shop.jsx` polling effect uses `useRef` to stabilize `refreshUser`/`loadCharacters` against AuthContext re-renders.
+  - Verification (iter 8): backend 28/28 PASS, frontend 0 key warnings + 0 unstable-nested-components warnings across full critical path.
+
+
 
 ### v1.0 — MVP
 - Auth (JWT + Google OAuth)
