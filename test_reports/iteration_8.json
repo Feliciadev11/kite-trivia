@@ -1,0 +1,52 @@
+{
+  "summary": "Iteration 8 regression of the AnimatePresence-around-TabsContent fix in Shop.jsx. PRIMARY OBJECTIVE VERIFIED: zero React 'two children with the same key' / 'unique key' warnings AND zero 'no-unstable-nested-components' warnings observed across the entire critical path: Landing -> Signup -> Dashboard -> Shop (Kites default + 5-swap Companions/Skies/Kites stress) -> Leaderboard -> Profile -> Play. Console.error was patched via add_init_script and tallied — 0/0/0 (key / unstable / other). Backend pytest 28/28 PASS (no backend changes). Both previously reported clusters (4 dashboard + 4 shop-tab key warnings from iter 7) are FULLY ELIMINATED.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_tests": [
+    "Backend pytest 28/28 PASS (auth/register/login/logout, questions, scoring, leaderboard, my_rank, characters, purchase+equip, daily reward, forgot+reset password incl. rate limit, Stripe checkout URL flow, webhook endpoint)",
+    "Frontend signup flow: TEST_kite_<ts>@example.com / DreamySky123! -> auto-redirects to /dashboard",
+    "Console regression — 0 'two children with the same key' warnings on /dashboard first render (iter 7 had 4)",
+    "Console regression — 0 key warnings after clicking Shop Kites tab",
+    "Console regression — 0 key warnings after clicking Shop Companions tab (iter 7 had 4)",
+    "Console regression — 0 key warnings after clicking Shop Skies tab (iter 7 had 4)",
+    "Console regression — 0 key warnings after 5-swap tab switching stress (Kites<->Companions<->Skies cycles)",
+    "Console regression — 0 key warnings on /leaderboard, /profile, /play",
+    "Console regression — 0 'no-unstable-nested-components' warnings throughout (iter 7 fix holds)",
+    "Console regression — 0 other console.errors anywhere in the run",
+    "Shop Kites tab for level-1 user: all 4 rarity sections render with correct 'Unlocks at Level N' badges (3, 8, 14, 20)",
+    "Shop tab transitions show smooth motion.div fade-in (no AnimatePresence required)",
+    "Currently Equipped header shows Basic Kite + Dawn theme correctly",
+    "SkySplash overlay dismissal continues to work via [data-testid='sky-splash-begin-btn']"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_kite_trivia.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Shop.jsx (lines 252-388): RCA confirmed and fix verified. Removing <AnimatePresence> around the three <TabsContent> siblings eliminated the empty-string-key collision. Each TabsContent now wraps its content in a single keyed motion.div (key='kites-content'/'companions-content'/'skies-content') which is correct because Radix Tabs unmounts the inactive ones immediately, so AnimatePresence-style exit animations were never actually firing.",
+    "Shop.jsx still uses key={item.character_id} inside each rarity section. This is safe because (a) backend /api/characters returns each character_id exactly once, and (b) each rarity section is a separate <div key={rarity}> parent, so even sibling sections cannot collide. No composite key needed.",
+    "AnimatePresence import was correctly removed from Shop.jsx imports.",
+    "iter 7 fixes (Atmosphere, SkyThemeSwatch, Landing, SkyWandererCelebration, NextUnlockTease lifted UnlockPreview, alive-cleanup pattern in Profile/Leaderboard/Dashboard) all continue to hold — no regression.",
+    "Carry-over LOW: /app/backend/questions_db.py still has 30 duplicate whim_* question_ids (15 dupes). Does NOT cause any current React key warning (questions are keyed by question.id only on /play and Radix re-renders are stable), but worth deduping for data hygiene.",
+    "Carry-over LOW: SkySplash overlay still intercepts clicks on /signup cold-load — automated tests must dismiss it first. Not a regression."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "100% (28/28 pytest)",
+    "frontend": "100% on the regression target — 0 key warnings, 0 unstable warnings, 0 other console.errors across full critical-path traversal (Landing -> Signup -> Dashboard -> Shop x3 tabs + stress -> Leaderboard -> Profile -> Play)"
+  },
+  "test_credentials": "Ephemeral via /api/auth/register: TEST_kite_<ts>@example.com / DreamySky123!",
+  "seed_data_creation": "One ephemeral user per run via register endpoint.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iteration 8 regression CLEAN. Both the unstable-nested-components fix (iter 7) and the AnimatePresence-around-TabsContent fix (iter 8) are verified end-to-end with patched console.error + window.__keyErrors capture. Backend pytest 28/28 holds. If any future React key warning re-emerges, focus on (a) the Shop.jsx tab structure (do NOT re-introduce AnimatePresence around TabsContent) and (b) the carry-over duplicate whim_* IDs in questions_db.py if /play ever starts keying by question_id. SkySplash overlay click-interception on auth pages is unchanged — automated tests should keep dismissing [data-testid='sky-splash-begin-btn'] first.",
+  "rca of the issue": "RCA — duplicate-keys (RESOLVED): The 8 lingering 'two children with same key' warnings traced exclusively to <AnimatePresence> wrapping three unkeyed <TabsContent> siblings in Shop.jsx. AnimatePresence requires each direct child to have a unique `key` prop; since TabsContent is a Radix primitive with no default key, all three got assigned an empty string and collided. Fix: removed the AnimatePresence wrapper (no exit animations were firing anyway because Radix Tabs unmounts inactive panels immediately) and added explicit keys to the inner motion.div for clarity. Verification: patched console.error in browser + tallied warnings across full critical path -> 0 key warnings, 0 unstable warnings, 0 other errors. Both clusters from iter 7 (4 on dashboard, 4 on shop tabs) are gone."
+}

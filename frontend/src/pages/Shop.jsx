@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import axios from "axios";
 import { Button } from "../components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "../components/ui/dialog";
@@ -249,14 +249,14 @@ export default function ShopPage() {
             </TabsTrigger>
           </TabsList>
 
-          <AnimatePresence>
-            {/* Kites Tab */}
-            <TabsContent value="kites" className="mt-0">
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-              >
+          {/* Kites Tab */}
+          <TabsContent value="kites" className="mt-0">
+            <motion.div
+              key="kites-content"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.4, ease: 'easeOut' }}
+            >
                 {['common', 'rare', 'epic', 'legendary'].map(rarity => {
                   const items = sortByRarity(kites).filter(k => k.rarity === rarity);
                   if (items.length === 0) return null;
@@ -298,9 +298,10 @@ export default function ShopPage() {
             {/* Companions Tab */}
             <TabsContent value="companions" className="mt-0">
               <motion.div
+                key="companions-content"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
+                transition={{ duration: 0.4, ease: 'easeOut' }}
               >
                 {['common', 'rare', 'epic', 'legendary'].map(rarity => {
                   const items = sortByRarity(companions).filter(k => k.rarity === rarity);
@@ -343,9 +344,10 @@ export default function ShopPage() {
             {/* Sky Themes Tab */}
             <TabsContent value="skies" className="mt-0">
               <motion.div
+                key="skies-content"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
+                transition={{ duration: 0.4, ease: 'easeOut' }}
               >
                 {['common', 'rare', 'epic', 'legendary'].map(rarity => {
                   const items = sortByRarity(skyThemes).filter(k => k.rarity === rarity);
@@ -384,7 +386,6 @@ export default function ShopPage() {
                 })}
               </motion.div>
             </TabsContent>
-          </AnimatePresence>
         </Tabs>
       </main>
 
