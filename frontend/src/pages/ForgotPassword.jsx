@@ -8,6 +8,7 @@ import { Label } from "../components/ui/label";
 import { Card } from "../components/ui/card";
 import { API } from "../App";
 import { toast } from "sonner";
+import { extractErrorMessage } from "../lib/errors";
 import { Mail, Lock, ArrowLeft, Key, Copy, Check } from "lucide-react";
 
 export default function ForgotPasswordPage() {
@@ -36,7 +37,7 @@ export default function ForgotPasswordPage() {
         toast.info("If that email is registered, a code has been generated.");
       }
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Could not generate code");
+      toast.error(extractErrorMessage(err, "Could not generate code"));
     } finally {
       setLoading(false);
     }
@@ -62,7 +63,7 @@ export default function ForgotPasswordPage() {
       toast.success("Password reset! Please sign in.");
       navigate("/login");
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Reset failed");
+      toast.error(extractErrorMessage(err, "Reset failed"));
     } finally {
       setLoading(false);
     }
@@ -74,7 +75,9 @@ export default function ForgotPasswordPage() {
       await navigator.clipboard.writeText(generatedCode);
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
-    } catch (e) {}
+    } catch (e) {
+      // ignore clipboard errors
+    }
   };
 
   return (

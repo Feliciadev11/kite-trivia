@@ -6,6 +6,7 @@ import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { useAuth } from "../App";
 import { toast } from "sonner";
+import { extractErrorMessage } from "../lib/errors";
 import { Mail, Lock, User, ArrowRight } from "lucide-react";
 
 export default function SignupPage() {
@@ -25,7 +26,7 @@ export default function SignupPage() {
       toast.success("Account created! Let's play!");
       navigate('/dashboard');
     } catch (error) {
-      toast.error(error.response?.data?.detail || "Registration failed");
+      toast.error(extractErrorMessage(error, "Registration failed"));
     } finally {
       setLoading(false);
     }

@@ -6,6 +6,7 @@ import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { useAuth } from "../App";
 import { toast } from "sonner";
+import { extractErrorMessage } from "../lib/errors";
 import { Mail, Lock, ArrowRight } from "lucide-react";
 
 export default function LoginPage() {
@@ -24,7 +25,7 @@ export default function LoginPage() {
       toast.success("Welcome back!");
       navigate('/dashboard');
     } catch (error) {
-      toast.error(error.response?.data?.detail || "Login failed");
+      toast.error(extractErrorMessage(error, "Login failed"));
     } finally {
       setLoading(false);
     }
@@ -163,7 +164,7 @@ export default function LoginPage() {
             </p>
 
             <p className="text-center mt-3 text-sky-600">
-              Don't have an account?{" "}
+              Don&apos;t have an account?{" "}
               <Link to="/signup" className="text-sky-700 font-semibold hover:underline" data-testid="signup-link">
                 Sign Up
               </Link>
