@@ -19,7 +19,9 @@ export const SkySplash = () => {
       localStorage.setItem(SPLASH_KEY, "true");
       // Also persist that the user opted in to ambient audio for future sessions
       localStorage.setItem("kite_audio_isPlaying", "true");
-    } catch (e) {}
+    } catch (e) {
+      // localStorage may be unavailable (private mode) — ignore
+    }
     if (!isPlaying) togglePlay();
     setShow(false);
   };

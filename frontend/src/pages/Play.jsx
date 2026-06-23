@@ -33,7 +33,9 @@ export default function PlayPage() {
       setQuestions(response.data);
     } catch (error) {
       toast.error("Failed to load questions");
-      console.error(error);
+      if (process.env.NODE_ENV !== "production") {
+        console.error(error);
+      }
     } finally {
       setLoading(false);
     }

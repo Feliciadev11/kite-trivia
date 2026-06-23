@@ -28,7 +28,9 @@ export default function DashboardPage() {
         const response = await axios.get(`${API}/daily-reward`, { withCredentials: true });
         setDailyReward(response.data);
       } catch (error) {
+      if (process.env.NODE_ENV !== "production") {
         console.error("Failed to fetch daily reward status");
+      }
       }
     };
     fetchDailyReward();

@@ -202,7 +202,7 @@ export const AudioProvider = ({ children }) => {
     const ctx = ensureContext();
     if (!ctx) return;
     if (ctx.state === 'suspended') {
-      try { await ctx.resume(); } catch (e) {}
+      try { await ctx.resume(); } catch (e) { /* user-gesture rule — safe to ignore */ }
     }
 
     if (isPlaying) {
@@ -298,7 +298,7 @@ export const AudioProvider = ({ children }) => {
     return () => {
       stopScheduler();
       if (ctxRef.current) {
-        try { ctxRef.current.close(); } catch (e) {}
+        try { ctxRef.current.close(); } catch (e) { /* already closed */ }
       }
     };
   }, [stopScheduler]);
