@@ -498,3 +498,174 @@ def test_cors_blocks_subdomain_attack():
                      headers={"Origin": "https://evil.preview.emergentagent.com.attacker.com"})
     assert r.status_code == 200
     assert _get_acao(r.headers) is None
+
+
+
+# --- iter 10: SECURITY FIX 1 — Cookie SameSite=Lax on all 3 auth endpoints -------
+def _get_set_cookies(response):
+    """Return list of all Set-Cookie header values (case-insensitive)."""
+    # requests exposes raw headers via response.raw.headers.get_all when available;
+    # fall back to response.headers which combines them.
+    try:
+        return response.raw.headers.getlist("Set-Cookie")
+    except Exception:
+        val = response.headers.get("Set-Cookie") or response.headers.get("set-cookie")
+        return [val] if val else []
+
+
+def _session_cookie(response):
+    for c in _get_set_cookies(response):
+        if c and c.lower().startswith("session_token="):
+            return c
+    return None
+
+
+def test_register_sets_samesite_lax_cookie():
+    ts = int(time.time() * 1000)
+    payload = {
+        "email": f"TEST_kite_iter10_reg_{ts}@example.com",
+        "password": "DreamySky123!",
+        "name": "TEST Iter10 Reg",
+    }
+    r = requests.post(f"{API}/auth/register", json=payload)
+    assert r.status_code == 200, r.text
+    cookie = _session_cookie(r)
+    assert cookie is not None, f"session_token cookie missing. Set-Cookie: {_get_set_cookies(r)}"
+    low = cookie.lower()
+    assert "samesite=lax" in low, f"Expected SameSite=Lax, got: {cookie}"
+    assert "samesite=none" not in low, f"SameSite=None MUST be gone, got: {cookie}"
+
+
+def test_login_sets_samesite_lax_cookie():
+    ts = int(time.time() * 1000)
+    payload = {
+        "email": f"TEST_kite_iter10_login_{ts}@example.com",
+        "password": "DreamySky123!",
+        "name": "TEST Iter10 Login",
+    }
+    # Register first
+    r = requests.post(f"{API}/auth/register", json=payload)
+    assert r.status_code == 200, r.text
+    # Now login
+    r2 = requests.post(f"{API}/auth/login",
+                       json={"email": payload["email"], "password": payload["password"]})
+    assert r2.status_code == 200, r2.text
+    cookie = _session_cookie(r2)
+    assert cookie is not None, f"session_token cookie missing on login: {_get_set_cookies(r2)}"
+    low = cookie.lower()
+    assert "samesite=lax" in low, f"Expected SameSite=Lax on login, got: {cookie}"
+    assert "samesite=none" not in low, f"SameSite=None MUST be gone, got: {cookie}"
+
+
+def test_session_exchange_endpoint_uses_samesite_lax_in_source():
+    """
+    /api/auth/session requires a valid Emergent OAuth `session_id` from the header
+    X-Session-ID. We can't get a real one in tests, so instead verify the source
+    file uses samesite="lax" at the session-exchange cookie call. This validates
+    the fix without requiring live OAuth.
+    """
+    import re
+    with open("/app/backend/server.py", "r") as f:
+        src = f.read()
+    # find all samesite= arguments
+    matches = re.findall(r'samesite\s*=\s*["\']([a-zA-Z]+)["\']', src)
+    assert len(matches) >= 3, f"Expected >=3 samesite calls, found {matches}"
+    assert all(m.lower() == "lax" for m in matches), (
+        f"All samesite values must be 'lax', got: {matches}"
+    )
+    # extra: ensure no samesite="none" survives in the source
+    assert 'samesite="none"' not in src.lower().replace("'", '"'), (
+        "samesite=\"none\" must not remain in server.py"
+    )
+
+
+# --- iter 10: SECURITY FIX 2 — Open-Redirect defense (_resolve_safe_origin) -----
+import sys as _sys
+_sys.path.insert(0, "/app/backend")
+
+
+def _make_fake_request(base_url="https://kite-trivia-quest.preview.emergentagent.com/"):
+    import types
+    return types.SimpleNamespace(base_url=base_url)
+
+
+def test_resolve_safe_origin_blocks_evil():
+    from server import _resolve_safe_origin
+    r = _make_fake_request()
+    out = _resolve_safe_origin("https://evil.example.com", r)
+    assert "evil.example.com" not in out, f"evil origin leaked: {out}"
+    assert out == "https://kite-trivia-quest.preview.emergentagent.com"
+
+
+def test_resolve_safe_origin_allows_configured():
+    from server import _resolve_safe_origin
+    r = _make_fake_request()
+    legit = "https://kite-trivia-quest.preview.emergentagent.com"
+    out = _resolve_safe_origin(legit, r)
+    assert out == legit
+
+
+def test_resolve_safe_origin_allows_regex_preview():
+    from server import _resolve_safe_origin
+    r = _make_fake_request()
+    origin = "https://some-other.preview.emergentagent.com"
+    out = _resolve_safe_origin(origin, r)
+    assert out == origin
+
+
+def test_resolve_safe_origin_rejects_dangerous_schemes():
+    from server import _resolve_safe_origin
+    r = _make_fake_request()
+    fallback = "https://kite-trivia-quest.preview.emergentagent.com"
+    for bad in ["javascript:alert(1)", "//evil.example.com", "ftp://evil.example.com",
+                "data:text/html,<script>alert(1)</script>", "", None]:
+        out = _resolve_safe_origin(bad, r)
+        assert out == fallback, f"bad candidate {bad!r} did not fall back: {out}"
+
+
+def test_resolve_safe_origin_rejects_suffix_attack():
+    from server import _resolve_safe_origin
+    r = _make_fake_request()
+    # domain that CONTAINS the legit suffix but is not the legit domain
+    out = _resolve_safe_origin("https://kite-trivia-quest.preview.emergentagent.com.attacker.com", r)
+    assert "attacker.com" not in out, f"suffix attack leaked: {out}"
+    assert out == "https://kite-trivia-quest.preview.emergentagent.com"
+
+
+def test_purchase_with_evil_origin_url_does_not_reflect_it(client):
+    """POST /api/characters/purchase with origin_url=evil must not surface evil.example.com
+    in the response body. For a free item that grants directly, no URL is returned at all.
+    For a paid item, the returned Stripe url is checkout.stripe.com (evil origin cannot appear
+    in the top-level `url` field). This is a lightweight end-to-end guarantee."""
+    # find any free item the level-1 user qualifies for
+    r = client.get(f"{API}/characters")
+    assert r.status_code == 200
+    chars = r.json()
+    free_items = [c for c in chars if float(c.get("price", 0)) == 0
+                  and int(c.get("unlock_level", 1)) <= 1
+                  and c.get("character_id") not in (
+                      # exclude default starters that user already owns
+                      "basic_kite", "cloud_companion", "dawn_sky",
+                  )]
+    # if none, pick a paid item at level<=1 (backend will still return url or 403)
+    target = None
+    if free_items:
+        target = free_items[0]
+    else:
+        for c in chars:
+            if int(c.get("unlock_level", 1)) <= 1 and float(c.get("price", 0)) > 0:
+                target = c
+                break
+    if not target:
+        pytest.skip("no purchasable item found for level-1 user")
+
+    r2 = client.post(f"{API}/characters/purchase",
+                     json={"character_id": target["character_id"],
+                           "origin_url": "https://evil.example.com"})
+    # Response must not reflect evil.example.com anywhere in the body
+    body_text = r2.text.lower()
+    assert "evil.example.com" not in body_text, (
+        f"Open redirect regression: response leaked evil.example.com — {r2.status_code} {r2.text}"
+    )
+    # And status is 200 (free grant) or 200 with url (paid) or 400/403 for owned/level.
+    assert r2.status_code in (200, 400, 403), f"unexpected status: {r2.status_code} {r2.text}"

@@ -222,7 +222,7 @@ async def register(user_data: UserCreate, response: Response):
         value=session_token,
         httponly=True,
         secure=True,
-        samesite="none",
+        samesite="lax",
         path="/",
         max_age=7*24*60*60
     )
@@ -261,7 +261,7 @@ async def login(credentials: UserLogin, response: Response):
         value=session_token,
         httponly=True,
         secure=True,
-        samesite="none",
+        samesite="lax",
         path="/",
         max_age=7*24*60*60
     )
@@ -359,7 +359,7 @@ async def exchange_session(request: Request, response: Response):
         value=session_token,
         httponly=True,
         secure=True,
-        samesite="none",
+        samesite="lax",
         path="/",
         max_age=7*24*60*60
     )
@@ -908,6 +908,37 @@ async def equip_character(
         )
         return {"message": "Character equipped", "character_id": character_id}
 
+# ---------------------------------------------------------------------------
+# Open-Redirect defense for Stripe checkout URLs (CWE-601).
+# `origin_url` in PurchaseRequest is client-supplied and would otherwise be
+# echoed into success_url/cancel_url. We only honour it when it matches the
+# same allowlist we use for CORS.
+# ---------------------------------------------------------------------------
+import re as _re
+
+def _origin_allowlist():
+    raw = os.environ.get("CORS_ORIGINS", "").strip()
+    origins = [o.strip().rstrip("/") for o in raw.split(",") if o.strip() and o.strip() != "*"]
+    regex = os.environ.get("CORS_ORIGIN_REGEX", r"^https://[a-z0-9-]+\.preview\.emergentagent\.com$")
+    return origins, regex
+
+def _resolve_safe_origin(candidate: Optional[str], request: Request) -> str:
+    """Return `candidate` iff it matches the CORS allowlist; else fall back
+    to the backend's own base_url (safe by construction)."""
+    fallback = str(request.base_url).rstrip("/")
+    if not candidate or not isinstance(candidate, str):
+        return fallback
+    candidate = candidate.strip().rstrip("/")
+    if not (candidate.startswith("http://") or candidate.startswith("https://")):
+        return fallback
+    origins, regex = _origin_allowlist()
+    if candidate in origins:
+        return candidate
+    if regex and _re.match(regex, candidate):
+        return candidate
+    return fallback
+
+
 @api_router.post("/characters/purchase")
 async def purchase_character(
     purchase: PurchaseRequest,
@@ -918,7 +949,6 @@ async def purchase_character(
     from emergentintegrations.payments.stripe.checkout import (
         StripeCheckout, CheckoutSessionRequest,
     )
-
     character = await db.characters.find_one(
         {"character_id": purchase.character_id},
         {"_id": 0}
@@ -956,8 +986,11 @@ async def purchase_character(
         )
         return {"free": True, "granted": True, "character_id": purchase.character_id}
 
-    # Build success/cancel URLs from the request origin (provided by frontend)
-    origin = purchase.origin_url or str(request.base_url).rstrip("/")
+    # Build success/cancel URLs from the request origin (provided by frontend).
+    # SECURITY: origin_url is client-controlled — validate against the CORS
+    # allowlist to prevent Open Redirect (CWE-601). If unknown, fall back to
+    # the request's own base_url (backend-derived, safe).
+    origin = _resolve_safe_origin(purchase.origin_url, request)
     success_url = f"{origin.rstrip('/')}/shop?session_id={{CHECKOUT_SESSION_ID}}"
     cancel_url = f"{origin.rstrip('/')}/shop?canceled=1"
 
