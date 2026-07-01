@@ -30,29 +30,38 @@ from emergentintegrations.llm.chat import LlmChat, UserMessage  # noqa: E402
 EMERGENT_LLM_KEY = os.environ["EMERGENT_LLM_KEY"]
 
 # Target total NEW questions (will be deduped, so ask for a bit extra)
-TARGET_NEW = 1100
+TARGET_NEW = 550
 BATCH_SIZE = 25  # questions per LLM call
 
-# Category weights matched to Kite's calming aesthetic. Categories must match
-# what already exists in questions_db.py so the play loop keeps balanced bags.
+# Rebalanced category weights — heavier on categories that were sparse after
+# the first generation pass (geography, history, inventions, movies,
+# technology, literature, holidays, sports, travel), lighter on already-heavy
+# whimsical/animals/cozy_facts. Still tuned for Kite's calming tone.
 CATEGORY_WEIGHTS = {
-    "whimsical": 14,
-    "cozy_facts": 10,
-    "animals": 10,
-    "nature": 9,
-    "kid_classics": 8,
-    "art": 7,
-    "kite_lore": 6,
-    "food": 6,
+    "geography2": 10,
+    "inventions": 10,
+    "literature": 10,
+    "movies": 9,
+    "technology": 9,
+    "travel": 9,
+    "sports": 8,
+    "holidays": 8,
+    "history": 8,
+    "language": 7,
+    "science": 7,
+    "mythology": 6,
+    "math_fun": 6,
+    "art": 6,
+    "riddles": 6,
     "music": 5,
+    "food": 5,
     "space": 5,
-    "mythology": 4,
-    "riddles": 4,
-    "math_fun": 3,
-    "language": 3,
-    "holidays": 2,
-    "history": 2,
-    "science": 2,
+    "kite_lore": 5,
+    "kid_classics": 4,
+    "nature": 4,
+    "cozy_facts": 3,
+    "animals": 3,
+    "whimsical": 3,
 }
 
 # Difficulty distribution (60% easy / 30% medium / 10% hard)
@@ -183,8 +192,9 @@ def _load_existing() -> tuple[list, set, dict]:
 
 def _next_id(category: str, counts: Counter) -> str:
     counts[category] += 1
-    # Suffix counter to avoid collisions with old whim_* / animal_* schemes
-    return f"{category}_gen_{counts[category]}"
+    # Suffix counter and pass number to avoid collisions with old whim_* /
+    # animal_* / prior `_gen_` schemes.
+    return f"{category}_gen2_{counts[category]}"
 
 
 def _append_to_db_file(new_questions: list[dict]) -> None:

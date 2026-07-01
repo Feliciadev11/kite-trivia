@@ -48,6 +48,15 @@ Build a trivia app called Kite with:
 | Shop / Stripe Checkout | Working (Apple Pay, Google Pay, Visa, MC) |
 
 ## What's Been Implemented
+- 2026-02-17 — **Content Expansion Pass 2 + Full-DB Dedupe (P1)**:
+  - Ran generator with rebalanced weights favoring under-represented categories (geography2, inventions, literature, movies, technology, travel, sports, holidays, history).
+  - LLM produced ~500 candidate questions across 72 batches; 476 passed per-batch validation (schema + dedupe vs existing DB) and were appended.
+  - Full-DB dedupe pass across all 2280 rows: removed 2 exact-text duplicates + 85 near-duplicates (same first-6-words head AND same correct-answer value; kept the earliest occurrence). Net: **2280 → 2193 questions**.
+  - ID scheme this session: `{category}_gen2_{N}` to avoid collision with prior `_gen_` batch.
+  - Final difficulty mix: 54.2% easy / 34.7% medium / 11.1% hard.
+  - Verified: 32/32 pytest PASS, live `/api/questions` serves the enlarged pool.
+
+
 - 2026-02-17 — **Content Expansion + Pacing (P1)**:
   - **Trivia bank grown 820 → 1804** (+984 net; +992 generated, 8 pre-existing duplicates removed). New questions generated via Claude Sonnet 4.6 through Emergent LLM key using `/app/backend/scripts/generate_questions.py` — reproducible one-off pipeline with validation, dedupe by normalized text, and category-weighted planning tuned to Kite's cozy tone.
   - **Difficulty mix**: 53% easy / 36% medium / 11% hard (target was 60/30/10).
