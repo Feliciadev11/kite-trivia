@@ -20,7 +20,8 @@ export default function DashboardPage() {
   const [dailyReward, setDailyReward] = useState(null);
   const [claimingReward, setClaimingReward] = useState(false);
 
-  const xpForNextLevel = user?.level * 100 || 100;
+  // Mirrors backend xp_required_for_next_level: 150 + level * 150 (smart curve).
+  const xpForNextLevel = 150 + (user?.level || 1) * 150;
   const xpProgress = ((user?.xp || 0) / xpForNextLevel) * 100;
 
   useEffect(() => {

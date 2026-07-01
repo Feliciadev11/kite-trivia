@@ -654,7 +654,7 @@ async def submit_answer(
     # Check for level up
     new_xp = current_user.xp + xp_earned
     new_level = current_user.level
-    xp_for_next_level = new_level * 100
+    xp_for_next_level = xp_required_for_next_level(new_level)
 
     if new_xp >= xp_for_next_level:
         new_level += 1
@@ -695,6 +695,14 @@ async def submit_answer(
         "level_up": new_level > current_user.level,
         "new_milestones": new_milestones,
     }
+
+# ==================== XP / LEVELING ====================
+# Smart curve: 150 + level * 150. Early levels stay quick to hook players,
+# then spacing widens gradually. L1→L2=300, L5→L6=900, L10→L11=1650,
+# L20→L21=3150.
+def xp_required_for_next_level(level: int) -> int:
+    return 150 + level * 150
+
 
 # ==================== CHARACTER ROUTES ====================
 
@@ -1144,7 +1152,7 @@ async def get_profile(current_user: User = Depends(get_current_user)):
     if current_user.total_questions > 0:
         accuracy = round((current_user.total_correct / current_user.total_questions) * 100, 1)
     
-    xp_for_next_level = current_user.level * 100
+    xp_for_next_level = xp_required_for_next_level(current_user.level)
     xp_progress = (current_user.xp / xp_for_next_level) * 100 if xp_for_next_level > 0 else 0
     
     return {
@@ -1226,7 +1234,7 @@ async def claim_daily_reward(current_user: User = Depends(get_current_user)):
     # Update user
     new_xp = current_user.xp + total_xp
     new_level = current_user.level
-    xp_for_next_level = new_level * 100
+    xp_for_next_level = xp_required_for_next_level(new_level)
     
     level_up = False
     if new_xp >= xp_for_next_level:

@@ -48,6 +48,13 @@ Build a trivia app called Kite with:
 | Shop / Stripe Checkout | Working (Apple Pay, Google Pay, Visa, MC) |
 
 ## What's Been Implemented
+- 2026-02-17 — **Content Expansion + Pacing (P1)**:
+  - **Trivia bank grown 820 → 1804** (+984 net; +992 generated, 8 pre-existing duplicates removed). New questions generated via Claude Sonnet 4.6 through Emergent LLM key using `/app/backend/scripts/generate_questions.py` — reproducible one-off pipeline with validation, dedupe by normalized text, and category-weighted planning tuned to Kite's cozy tone.
+  - **Difficulty mix**: 53% easy / 36% medium / 11% hard (target was 60/30/10).
+  - **Level curve tuned for spacing** — `xp_required_for_next_level(L) = 150 + L * 150` (smart curve). L1→L2 now 300 XP (was 100 XP), L20→L21 now 3150 XP (was 2000 XP). Backed by 3 call sites in `server.py` and the Dashboard client mirror. New backend helper: `xp_required_for_next_level()`.
+  - Verification: backend pytest 32/32 PASS; live smoke-test on preview URL shows Dashboard "0 / 300 XP" correctly.
+
+
 - 2026-02-17 — **Code Review Sweep (Iteration 9)** — addressed all priorities in user's code review:
   - **P0 SECURITY (HIGH)**: Fixed CORS misconfiguration `allow_origins='*'` + `allow_credentials=True` (CWE-942). `server.py` now uses an env-driven allowlist (`CORS_ORIGINS`) plus a `CORS_ORIGIN_REGEX` for emergent preview domains; wildcard explicitly stripped if present. Backend pytest now includes 4 new CORS hardening tests (32/32 pass total). NOTE: K8s ingress proxy still injects `ACAO: *` on the public preview URL (platform-level, outside app code) — the FastAPI fix is verified correct via localhost:8001.
   - **P0 React hooks**: Ran ESLint with `react-hooks/exhaustive-deps` at `error` level — **0 missing-deps issues**. The "31 missing deps" claim from the external review tool didn't match canonical React rules; codebase passes cleanly.
