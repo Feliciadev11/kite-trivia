@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import { Button } from "../components/ui/button";
 import { Progress } from "../components/ui/progress";
 import { useAuth, API } from "../App";
-import { Play, Trophy, ShoppingBag, User, LogOut, Zap, Target, Star, Gift, Flame, Settings } from "lucide-react";
+import { Play, Trophy, ShoppingBag, User, LogOut, Zap, Target, Star, Gift, Flame, Settings, Sparkles } from "lucide-react";
 import { KiteCharacter, CompanionCharacter } from "../components/KiteCharacter";
 import { useState, useEffect } from "react";
 import axios from "axios";
@@ -13,10 +13,12 @@ import { AudioControl } from "../components/AudioControl";
 import { NextUnlockTease } from "../components/NextUnlockTease";
 import { SeasonalSkyBanner } from "../components/SeasonalSkyBanner";
 import { logError } from "../lib/logger";
+import { usePremium } from "../contexts/PremiumContext";
 
 export default function DashboardPage() {
   const navigate = useNavigate();
   const { user, logout, refreshUser } = useAuth();
+  const { is_premium, rounds_remaining_today, openPaywall } = usePremium();
   const [dailyReward, setDailyReward] = useState(null);
   const [claimingReward, setClaimingReward] = useState(false);
 
@@ -72,6 +74,21 @@ export default function DashboardPage() {
           <h1 className="text-2xl font-bold text-sky-600">Kite</h1>
           <nav className="flex items-center gap-2">
             <AudioControl minimal />
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={openPaywall}
+              className={`rounded-full ${is_premium
+                ? "text-emerald-600 hover:bg-emerald-50"
+                : "text-amber-600 hover:bg-amber-50"}`}
+              data-testid="nav-premium"
+              title={is_premium ? "Premium active" : "Unlock Kite Premium"}
+            >
+              <Sparkles className="w-5 h-5" />
+              {!is_premium && rounds_remaining_today !== null && rounds_remaining_today !== undefined && (
+                <span className="ml-1 text-xs font-medium">{rounds_remaining_today}</span>
+              )}
+            </Button>
             <Button
               variant="ghost"
               size="sm"

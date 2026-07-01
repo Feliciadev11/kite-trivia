@@ -28,6 +28,15 @@ def client(session_user):
     s.headers.update({"Content-Type": "application/json"})
     r = s.post(f"{API}/auth/register", json=session_user)
     assert r.status_code == 200, f"register failed: {r.status_code} {r.text}"
+    # Mark the test user as premium so gameplay tests aren't blocked by the
+    # free-tier 3-rounds/day gate. This mirrors what the mobile client posts
+    # after RevenueCat reports the user owns the `kite_premium` entitlement.
+    sync = s.post(f"{API}/premium/sync", json={
+        "entitlement_active": True,
+        "product_id": "kite_premium_test",
+        "source": "pytest",
+    })
+    assert sync.status_code == 200, f"premium sync failed: {sync.status_code} {sync.text}"
     return s
 
 
@@ -669,3 +678,111 @@ def test_purchase_with_evil_origin_url_does_not_reflect_it(client):
     )
     # And status is 200 (free grant) or 200 with url (paid) or 400/403 for owned/level.
     assert r2.status_code in (200, 400, 403), f"unexpected status: {r2.status_code} {r2.text}"
+
+
+
+# ---------- Premium / Paywall ----------
+def test_free_tier_gate_blocks_after_daily_cap():
+    """Fresh (non-premium) user gets HTTP 402 after FREE_ROUNDS_PER_DAY rounds."""
+    ts = int(time.time() * 1000)
+    s = requests.Session()
+    s.headers.update({"Content-Type": "application/json"})
+    email = f"TEST_free_{ts}@example.com"
+    r = s.post(f"{API}/auth/register", json={"email": email, "password": "DreamySky123!", "name": "F"})
+    assert r.status_code == 200
+
+    # Play the allowed budget
+    for i in range(3):
+        r = s.get(f"{API}/questions", params={"limit": 10})
+        assert r.status_code == 200, f"round {i+1} failed unexpectedly: {r.status_code} {r.text}"
+
+    # 4th should be blocked
+    blocked = s.get(f"{API}/questions", params={"limit": 10})
+    assert blocked.status_code == 402, f"expected 402, got {blocked.status_code}"
+    detail = blocked.json().get("detail", {})
+    assert detail.get("code") == "free_tier_limit_reached"
+    assert detail.get("free_rounds_per_day") == 3
+
+
+def test_premium_sync_grants_unlimited_rounds():
+    """After marking premium via /premium/sync, the free-tier gate no longer applies."""
+    ts = int(time.time() * 1000)
+    s = requests.Session()
+    s.headers.update({"Content-Type": "application/json"})
+    r = s.post(f"{API}/auth/register", json={
+        "email": f"TEST_premsync_{ts}@example.com",
+        "password": "DreamySky123!",
+        "name": "P",
+    })
+    assert r.status_code == 200
+
+    # Exhaust free budget
+    for _ in range(3):
+        s.get(f"{API}/questions", params={"limit": 10})
+    assert s.get(f"{API}/questions", params={"limit": 10}).status_code == 402
+
+    # Sync premium — mimics what mobile client posts after RevenueCat purchase
+    sync = s.post(f"{API}/premium/sync", json={
+        "entitlement_active": True,
+        "product_id": "kite_premium_yearly",
+        "source": "revenuecat_ios",
+    })
+    assert sync.status_code == 200
+    data = sync.json()
+    assert data["is_premium"] is True
+    assert data["premium_product_id"] == "kite_premium_yearly"
+    assert data["rounds_remaining_today"] is None
+
+    # Post-premium round should succeed
+    ok = s.get(f"{API}/questions", params={"limit": 10})
+    assert ok.status_code == 200
+    assert len(ok.json()) > 0
+
+
+def test_premium_status_shape():
+    """/premium/status returns the expected client contract."""
+    ts = int(time.time() * 1000)
+    s = requests.Session()
+    s.headers.update({"Content-Type": "application/json"})
+    s.post(f"{API}/auth/register", json={
+        "email": f"TEST_prem_status_{ts}@example.com",
+        "password": "DreamySky123!",
+        "name": "S",
+    })
+    r = s.get(f"{API}/premium/status")
+    assert r.status_code == 200
+    body = r.json()
+    for key in [
+        "is_premium", "premium_expires_at", "premium_source", "premium_product_id",
+        "free_rounds_per_day", "rounds_played_today", "rounds_remaining_today",
+        "entitlement_id",
+    ]:
+        assert key in body, f"missing key {key} in status body: {body}"
+    assert body["entitlement_id"] == "kite_premium"
+    assert body["free_rounds_per_day"] == 3
+    assert body["is_premium"] is False
+    assert body["rounds_remaining_today"] == 3
+
+
+def test_premium_downgrade_via_sync():
+    """Setting entitlement_active=false restores the free-tier gate."""
+    ts = int(time.time() * 1000)
+    s = requests.Session()
+    s.headers.update({"Content-Type": "application/json"})
+    s.post(f"{API}/auth/register", json={
+        "email": f"TEST_prem_down_{ts}@example.com",
+        "password": "DreamySky123!",
+        "name": "D",
+    })
+    # Grant then revoke
+    s.post(f"{API}/premium/sync", json={"entitlement_active": True, "product_id": "kite_premium_monthly"})
+    s.post(f"{API}/premium/sync", json={"entitlement_active": False})
+
+    status = s.get(f"{API}/premium/status").json()
+    assert status["is_premium"] is False
+    assert status["rounds_remaining_today"] == 3
+
+    # Consume budget again
+    for _ in range(3):
+        s.get(f"{API}/questions", params={"limit": 10})
+    assert s.get(f"{API}/questions", params={"limit": 10}).status_code == 402

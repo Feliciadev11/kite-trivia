@@ -19,6 +19,8 @@ import { SettingsPage } from "./pages/Settings";
 
 // Contexts
 import { AudioProvider } from "./contexts/AudioContext";
+import { PremiumProvider } from "./contexts/PremiumContext";
+import { PaywallHost } from "./components/Paywall";
 import SkySplash from "./components/SkySplash";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
@@ -249,7 +251,10 @@ function App() {
         <AudioProvider>
           <SkySplash />
           <AuthProvider>
-            <AppRouter />
+            <PremiumProvider>
+              <AppRouter />
+              <PaywallHost />
+            </PremiumProvider>
           </AuthProvider>
         </AudioProvider>
       </BrowserRouter>

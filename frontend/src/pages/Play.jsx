@@ -10,11 +10,13 @@ import { toast } from "sonner";
 import { ArrowLeft, ArrowRight, CheckCircle, XCircle, Sparkles, Home } from "lucide-react";
 import { SkyWandererCelebration } from "../components/SkyWandererCelebration";
 import { logError } from "../lib/logger";
+import { usePremium } from "../contexts/PremiumContext";
 
 export default function PlayPage() {
   const navigate = useNavigate();
   const { user, refreshUser } = useAuth();
   const { playSoundEffect } = useAudio();
+  const { openPaywall, refreshServerStatus } = usePremium();
   const [questions, setQuestions] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState(null);
@@ -24,6 +26,7 @@ export default function PlayPage() {
   const [gameOver, setGameOver] = useState(false);
   const [score, setScore] = useState({ correct: 0, total: 0 });
   const [milestones, setMilestones] = useState(null);
+  const [freeGate, setFreeGate] = useState(null); // { rounds_played_today, free_rounds_per_day }
 
   const fetchQuestions = useCallback(async () => {
     try {
@@ -32,13 +35,25 @@ export default function PlayPage() {
         withCredentials: true
       });
       setQuestions(response.data);
+      setFreeGate(null);
     } catch (error) {
-      toast.error("Failed to load questions");
-      logError("fetchQuestions failed", error);
+      // Free-tier daily cap: server returns 402 with a structured `detail`.
+      if (error?.response?.status === 402) {
+        const detail = error.response.data?.detail || {};
+        setFreeGate({
+          rounds_played_today: detail.rounds_played_today,
+          free_rounds_per_day: detail.free_rounds_per_day,
+          message: detail.message,
+        });
+        refreshServerStatus?.();
+      } else {
+        toast.error("Failed to load questions");
+        logError("fetchQuestions failed", error);
+      }
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [refreshServerStatus]);
 
   useEffect(() => {
     fetchQuestions();
@@ -100,6 +115,51 @@ export default function PlayPage() {
     return (
       <div className="min-h-screen sky-gradient flex items-center justify-center">
         <LoadingKite message="Loading questions..." />
+      </div>
+    );
+  }
+
+  if (freeGate) {
+    return (
+      <div className="min-h-screen sky-gradient flex items-center justify-center p-4" data-testid="free-tier-gate">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.94 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.5, ease: "easeOut" }}
+          className="glass-card max-w-md w-full text-center p-8"
+        >
+          <div className="mx-auto w-16 h-16 rounded-full bg-gradient-to-br from-amber-100 to-pink-100 flex items-center justify-center mb-5">
+            <Sparkles className="w-8 h-8 text-amber-500" />
+          </div>
+          <h2 className="text-2xl font-semibold text-sky-900 mb-2">
+            You've flown far today
+          </h2>
+          <p className="text-sky-600 mb-1">
+            {freeGate.message || `You've played ${freeGate.rounds_played_today}/${freeGate.free_rounds_per_day} rounds today.`}
+          </p>
+          <p className="text-sky-500 text-sm mb-6">
+            Rest your wings until tomorrow — or unlock Kite Premium for unlimited flights.
+          </p>
+          <div className="flex flex-col gap-3">
+            <Button
+              onClick={openPaywall}
+              className="rounded-full bg-gradient-to-r from-sky-500 to-indigo-500 hover:from-sky-600 hover:to-indigo-600"
+              data-testid="free-gate-upgrade-btn"
+            >
+              <Sparkles className="w-4 h-4 mr-2" />
+              Unlock Kite Premium
+            </Button>
+            <Button
+              variant="ghost"
+              onClick={() => navigate("/dashboard")}
+              className="rounded-full text-sky-600"
+              data-testid="free-gate-back-btn"
+            >
+              <Home className="w-4 h-4 mr-2" />
+              Back to dashboard
+            </Button>
+          </div>
+        </motion.div>
       </div>
     );
   }

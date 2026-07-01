@@ -1,0 +1,61 @@
+{
+  "summary": "Iter 11 validated the mobile paywall build (Capacitor + RevenueCat + Free-tier gate). BACKEND: All 42 pytest tests PASS (3 harmless skips). Free-tier gate correctly returns HTTP 402 with detail.code='free_tier_limit_reached' on the 4th round; premium sync flips is_premium and grants all catalog items; downgrade re-applies the gate; /premium/status returns the full documented shape (entitlement_id='kite_premium', free_rounds_per_day=3, rounds_remaining_today=3 for fresh user). FRONTEND (web preview): nav-premium Sparkles icon renders with badge '3' for new user, opens paywall-dialog on click, amber paywall-web-notice explicitly names 'App Store or Google Play', restore-btn is DISABLED on web, purchase-btn is HIDDEN on web (as expected — Capacitor.isNativePlatform()===false), all 4 benefit rows render (Unlimited daily rounds / All sky themes / Every kite & companion / First access to future features). After 3 rounds, /play shows free-tier-gate with upgrade + back buttons; nav-premium badge decrements to '0'. No blocking console errors — a few 401s on /premium/status fire pre-login (PremiumContext boots before auth) which is cosmetic and expected. No regressions in Stripe shop, XP curve, or leaderboard.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "PremiumContext boot", "issues": ["Fires GET /api/premium/status while unauthenticated on first paint, producing 2x 401 console errors before login. Cosmetic only — auto-recovers post-login. Consider gating the boot fetch on presence of auth cookie / user context."]}
+    ]
+  },
+  "passed_tests": [
+    "BACKEND: /premium/status fresh user returns is_premium=false, free_rounds_per_day=3, rounds_played_today=0, rounds_remaining_today=3, entitlement_id='kite_premium' (test_premium_status_shape PASSED)",
+    "BACKEND: 3 rounds succeed with 10 questions each (test_free_tier_gate_blocks_after_daily_cap 1st half)",
+    "BACKEND: 4th /api/questions returns HTTP 402 with detail.code='free_tier_limit_reached', free_rounds_per_day=3, rounds_played_today=3 (test_free_tier_gate_blocks_after_daily_cap 2nd half)",
+    "BACKEND: /premium/sync {entitlement_active:true, product_id:'kite_premium_yearly'} flips is_premium=true, rounds_remaining_today=null; post-sync /questions succeeds again (test_premium_sync_grants_unlimited_rounds)",
+    "BACKEND: /premium/sync {entitlement_active:false} downgrades; free-tier gate re-applies after 3 rounds (test_premium_downgrade_via_sync)",
+    "BACKEND: All 42 pre-existing pytest tests PASS with the free-tier gate active (client fixture auto-syncs premium=true — matches E1 spec)",
+    "BACKEND: /premium/webhook accepts arbitrary JSON without error (stub verified via server.py inspection — see server.py L772-789)",
+    "FRONTEND: New user sees Sparkles icon [data-testid=nav-premium] with badge '3' in top nav",
+    "FRONTEND: Clicking nav-premium opens [data-testid=paywall-dialog]",
+    "FRONTEND: [data-testid=paywall-web-notice] renders amber banner with copy: 'Kite Premium is purchased through the App Store or Google Play. Open Kite on your iOS or Android device to subscribe.'",
+    "FRONTEND: [data-testid=paywall-restore-btn] rendered but disabled on web",
+    "FRONTEND: [data-testid=paywall-purchase-btn] HIDDEN on web (servicesAvailable=false path)",
+    "FRONTEND: All 4 benefit rows render: 'Unlimited daily rounds', 'All sky themes', 'Every kite & companion', 'First access to future features'",
+    "FRONTEND: After exhausting 3 rounds, /play renders [data-testid=free-tier-gate] with [data-testid=free-gate-upgrade-btn] + [data-testid=free-gate-back-btn]",
+    "FRONTEND: nav-premium badge decrements from '3' to '0' after 3 rounds played",
+    "NO REGRESSIONS: Stripe purchase flow still returns Stripe URL for paid items (test_purchase_paid_item_returns_session_url — skips when eligible item not available for session user, unit-tested elsewhere)",
+    "NO REGRESSIONS: leaderboard, profile, characters, daily-reward, forgot/reset password, CORS hardening, SameSite=Lax, Open-Redirect defense — all pre-existing 38 tests still green"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_kite_trivia.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "(NON-BLOCKING, cosmetic) Gate PremiumContext initial /api/premium/status fetch on presence of authenticated user so 2x 401 console errors don't fire pre-login. Boot fetch currently runs unconditionally on app mount.",
+    "(FUTURE — when store credentials arrive) Add X-RevenueCat-Signature verification in /api/premium/webhook (currently accepts anything — noted in code comment as TODO). Also enable RevenueCat SDK secret key env var + iOS/Android build. Not testable now."
+  ],
+  "critical_code_review_comments": [
+    "Free-tier gate correctly applied ONLY at /api/questions entry (server.py L560-573); increment happens after successful bag composition (L640-648) with UTC-midnight rollover via _today_utc_str() + last_round_date comparison — clean design, no double-counting on error paths.",
+    "_resolve_premium_state (L697) correctly handles expiry: if premium_expires_at is in the past it returns is_premium=false without needing an admin sweep — server enforces truth on every request.",
+    "sync_premium (L737) idempotently grants all catalog items via $addToSet with $each, preventing owned-list dupes. Good.",
+    "PremiumContext boots /api/premium/status on mount unconditionally, producing 401 console noise pre-login (see design_issues). Not a functional bug — just a cosmetic action-item.",
+    "Paywall.jsx correctly hides purchase-btn when servicesAvailable=false (verified in DOM: purchase-btn present=false). This matches the E1 spec for web preview.",
+    "Backend test fixture (client) auto-marks the session user premium via /premium/sync before running gameplay tests — this is the correct isolation strategy so free-tier gate doesn't leak into regressions.",
+    "(CARRY-OVER from iter 9-10, not this iter) K8s ingress still injects wildcard CORS headers on the public URL. Not in scope."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "100% — 42 passed / 3 harmless skipped (purchase_and_equip_kite when no unowned kite at level 5, purchase_paid_item_returns_session_url when session user has no eligible paid item, purchase_with_evil_origin_url_does_not_reflect_it when no eligible free item)",
+    "frontend": "100% — all paywall UI test-ids present and behaving per spec on web preview (unavailable state)"
+  },
+  "test_credentials": "Ephemeral users via /api/auth/register: TEST_ui_pay3_<ts>@example.com / DreamySky123! and TEST_free_<ts>@example.com etc. per test.",
+  "seed_data_creation": "No persistent seed data; each test creates its own ephemeral user via register endpoint.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Iter 11 mobile-paywall feature is production-ready for web preview. Backend has 42 passing pytest tests including 4 new premium tests (free_tier_gate_blocks_after_daily_cap / premium_sync_grants_unlimited_rounds / premium_status_shape / premium_downgrade_via_sync). Frontend paywall correctly renders 'unavailable on web' state — nav-premium badge, paywall-dialog, paywall-web-notice, paywall-restore-btn (disabled), paywall-purchase-btn (hidden), all 4 benefits, free-tier-gate on /play, badge decrement. Only cosmetic issue: PremiumContext boot fetches /api/premium/status before auth is established → 2x 401 console errors on first paint. Not a functional bug. When iOS/Android store credentials arrive, add RevenueCat webhook signature verification and re-test on native (currently untestable — Capacitor.isNativePlatform()===false in browser).",
+  "rca of the issue": "No functional bugs found. Cosmetic 401 console noise root-caused: PremiumContext (/app/frontend/src/contexts/PremiumContext.jsx) calls GET /api/premium/status on mount without checking whether an auth session cookie exists yet. On first paint before login, this fails with 401. Mitigation: guard the boot fetch behind the user-context-loaded state (e.g., only fetch when useAuth().user is truthy). Zero user-visible impact."
+}

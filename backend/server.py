@@ -80,6 +80,16 @@ class User(BaseModel):
     total_rewards_claimed: int = 0
     recently_seen_questions: List[str] = []
     unlocked_milestones: List[str] = []
+    # ----- Premium / Paywall (mobile IAP via RevenueCat) -----
+    # Sources: "revenuecat" (mobile), "stripe" (web sub — future), "grant" (manual)
+    is_premium: bool = False
+    premium_source: Optional[str] = None
+    premium_product_id: Optional[str] = None
+    premium_expires_at: Optional[str] = None  # ISO string; None = lifetime / active-until-verified
+    premium_updated_at: Optional[str] = None
+    # Free-tier daily round budget (only relevant when is_premium=False)
+    rounds_played_today: int = 0
+    last_round_date: Optional[str] = None  # YYYY-MM-DD in UTC
 
 class Character(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -547,6 +557,21 @@ async def get_questions(
     rounds feel fresh. The exclusion list auto-trims when it gets large relative
     to the available pool, so the user never runs out of questions."""
 
+    # ---- Free-tier daily round gate (premium bypasses this entirely) ----
+    entitlement = _resolve_premium_state(current_user)
+    if not entitlement["is_premium"]:
+        rounds_today = _today_round_count(current_user)
+        if rounds_today >= FREE_ROUNDS_PER_DAY:
+            raise HTTPException(
+                status_code=402,
+                detail={
+                    "code": "free_tier_limit_reached",
+                    "message": f"You've played {FREE_ROUNDS_PER_DAY} rounds today. Unlock Kite Premium for unlimited flights.",
+                    "rounds_played_today": rounds_today,
+                    "free_rounds_per_day": FREE_ROUNDS_PER_DAY,
+                },
+            )
+
     # Lazy seed
     total = await db.questions.count_documents({})
     if total == 0:
@@ -610,12 +635,163 @@ async def get_questions(
     served_ids = [q["question_id"] for q in bag]
     if served_ids:
         new_recent = (recent + served_ids)[-80:]
+        today = _today_utc_str()
+        # If it's a new UTC day, reset the free-tier counter to 1; else increment.
+        new_rounds_today = 1 if current_user.last_round_date != today else (current_user.rounds_played_today or 0) + 1
         await db.users.update_one(
             {"user_id": current_user.user_id},
-            {"$set": {"recently_seen_questions": new_recent}},
+            {"$set": {
+                "recently_seen_questions": new_recent,
+                "rounds_played_today": new_rounds_today,
+                "last_round_date": today,
+            }},
         )
 
     return bag
+
+
+# =========================================================================
+# PREMIUM / PAYWALL — Mobile IAP via RevenueCat entitlements
+# =========================================================================
+# Free tier: FREE_ROUNDS_PER_DAY rounds/day. All other UI is available; the
+# gate is only at /api/questions. Premium bypasses everything.
+#
+# The client (mobile) drives RevenueCat.getCustomerInfo() and posts the
+# authoritative entitlement info to /api/premium/sync. We store our own
+# copy so the server enforces the gate independently of client trust — every
+# request to /api/questions consults the DB, not the SDK.
+#
+# For hard/production security, add a webhook receiver on RevenueCat pointing
+# at /api/premium/webhook (stub included below). Until credentials arrive,
+# /api/premium/sync is the source of truth and can be tested end-to-end.
+# =========================================================================
+
+FREE_ROUNDS_PER_DAY = 3
+PREMIUM_ENTITLEMENT_ID = "kite_premium"  # matches RevenueCat entitlement identifier
+
+class PremiumSyncPayload(BaseModel):
+    """Sent by the mobile client after RevenueCat state changes.
+
+    entitlement_active: True if the user currently owns the `kite_premium` entitlement.
+    product_id:         The store product identifier (Apple/Google) that granted it, if any.
+    expires_at_iso:     Subscription end (ISO string). None for lifetime.
+    source:             "revenuecat_ios" | "revenuecat_android" | "restore" | "sandbox".
+    """
+    entitlement_active: bool
+    product_id: Optional[str] = None
+    expires_at_iso: Optional[str] = None
+    source: Optional[str] = None
+
+
+def _today_utc_str() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+
+def _today_round_count(user: User) -> int:
+    """Rounds played today (rolls over at UTC midnight)."""
+    if user.last_round_date != _today_utc_str():
+        return 0
+    return user.rounds_played_today or 0
+
+
+def _resolve_premium_state(user: User) -> dict:
+    """Read premium state off the user doc. Handles expiry safely."""
+    if not user.is_premium:
+        return {"is_premium": False, "expires_at": None, "product_id": None, "source": None}
+    # If we have an expiry and it's in the past, expire premium
+    if user.premium_expires_at:
+        try:
+            exp = datetime.fromisoformat(user.premium_expires_at)
+            if exp.tzinfo is None:
+                exp = exp.replace(tzinfo=timezone.utc)
+            if exp < datetime.now(timezone.utc):
+                return {"is_premium": False, "expires_at": user.premium_expires_at,
+                        "product_id": user.premium_product_id, "source": user.premium_source}
+        except (ValueError, TypeError):
+            pass
+    return {
+        "is_premium": True,
+        "expires_at": user.premium_expires_at,
+        "product_id": user.premium_product_id,
+        "source": user.premium_source,
+    }
+
+
+@api_router.get("/premium/status")
+async def get_premium_status(current_user: User = Depends(get_current_user)):
+    """Client-safe entitlement snapshot. Called on app start and after purchase."""
+    ent = _resolve_premium_state(current_user)
+    rounds_today = _today_round_count(current_user)
+    return {
+        "is_premium": ent["is_premium"],
+        "premium_expires_at": ent["expires_at"],
+        "premium_source": ent["source"],
+        "premium_product_id": ent["product_id"],
+        "free_rounds_per_day": FREE_ROUNDS_PER_DAY,
+        "rounds_played_today": rounds_today,
+        "rounds_remaining_today": max(0, FREE_ROUNDS_PER_DAY - rounds_today) if not ent["is_premium"] else None,
+        "entitlement_id": PREMIUM_ENTITLEMENT_ID,
+    }
+
+
+@api_router.post("/premium/sync")
+async def sync_premium(
+    payload: PremiumSyncPayload,
+    current_user: User = Depends(get_current_user),
+):
+    """Client (mobile) reports RevenueCat entitlement. We store it on the user
+    doc so the server-side gate can be enforced independently of the SDK.
+    """
+    now_iso = datetime.now(timezone.utc).isoformat()
+    update = {
+        "is_premium": bool(payload.entitlement_active),
+        "premium_source": payload.source or ("revenuecat" if payload.entitlement_active else None),
+        "premium_product_id": payload.product_id,
+        "premium_expires_at": payload.expires_at_iso,
+        "premium_updated_at": now_iso,
+    }
+    await db.users.update_one({"user_id": current_user.user_id}, {"$set": update})
+    # If newly premium, also grant every catalog item for a smooth "all unlocked"
+    # experience on mobile (per product decision 5c). This is idempotent.
+    if payload.entitlement_active:
+        catalog = await db.characters.find({}, {"_id": 0}).to_list(1000)
+        kite_ids = [c["character_id"] for c in catalog if c["category"] == "kite"]
+        companion_ids = [c["character_id"] for c in catalog if c["category"] == "companion"]
+        sky_ids = [c["character_id"] for c in catalog if c["category"] == "sky_theme"]
+        await db.users.update_one(
+            {"user_id": current_user.user_id},
+            {"$addToSet": {
+                "owned_characters": {"$each": kite_ids},
+                "owned_companions": {"$each": companion_ids},
+                "owned_sky_themes": {"$each": sky_ids},
+            }},
+        )
+    return await get_premium_status(current_user=User(**{**current_user.model_dump(), **update}))
+
+
+@api_router.post("/premium/webhook")
+async def premium_webhook(request: Request):
+    """RevenueCat webhook stub.
+
+    Configure in RevenueCat dashboard → Integrations → Webhooks with URL
+    `https://<your-backend>/api/premium/webhook`. Payload includes the
+    app_user_id which we set to our internal user_id at sign-in.
+
+    Body signing (X-RevenueCat-Signature) verification is left as a TODO
+    once you have the webhook secret from RevenueCat.
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        return {"received": True}
+    # Best-effort: no secret configured yet, so we only accept as read-only.
+    logger.info(f"[premium/webhook] event={body.get('event', {}).get('type')} user={body.get('event', {}).get('app_user_id')}")
+    return {"received": True}
+
+
+# =========================================================================
+# END PREMIUM
+# =========================================================================
 
 
 @api_router.post("/questions/answer")

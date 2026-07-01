@@ -1,0 +1,7 @@
+{
+  "appId": "com.kitetrivia.app",
+  "appName": "Kite",
+  "webDir": "build",
+  "server": { "androidScheme": "https" },
+  "ios": { "contentInset": "always" }
+}
