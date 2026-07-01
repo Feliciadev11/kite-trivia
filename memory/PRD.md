@@ -48,6 +48,13 @@ Build a trivia app called Kite with:
 | Shop / Stripe Checkout | Working (Apple Pay, Google Pay, Visa, MC) |
 
 ## What's Been Implemented
+- 2026-02-17 — **Security-Only Iteration (2 HIGH-severity fixes)**:
+  - **Finding 1 (CSRF)**: `SameSite=None` on all 3 auth cookies (register / login / session-exchange, `server.py` lines 225 / 264 / 362). Changed to `SameSite=Lax` — frontend and backend are same-origin so Lax fully preserves the auth flow while blocking cross-site cookie transmission.
+  - **Finding 2 (CWE-601 Open Redirect)**: `POST /api/characters/purchase` accepted client-supplied `origin_url` and reflected it into Stripe's `success_url`/`cancel_url`. Added `_resolve_safe_origin(candidate, request)` helper (~L925) that validates against the `CORS_ORIGINS` allowlist + anchored `CORS_ORIGIN_REGEX`. Non-http(s), suffix-attack, `javascript:`, protocol-relative and unknown origins fall back to `request.base_url` (backend-derived, safe by construction).
+  - **Not changed**: gameplay, UI, question DB, XP curve, Shop refactor.
+  - **Verified (testing_agent iter 10)**: 40 pytest PASS + 1 harmless skip. 9 new tests added (3 SameSite cookie assertions + 5 `_resolve_safe_origin` unit tests + 1 e2e purchase-open-redirect regression). Live curl on public URL confirms `SameSite=Lax` on the wire.
+
+
 - 2026-02-17 — **Content Expansion Pass 2 + Full-DB Dedupe (P1)**:
   - Ran generator with rebalanced weights favoring under-represented categories (geography2, inventions, literature, movies, technology, travel, sports, holidays, history).
   - LLM produced ~500 candidate questions across 72 batches; 476 passed per-batch validation (schema + dedupe vs existing DB) and were appended.
