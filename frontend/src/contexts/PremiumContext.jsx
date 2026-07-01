@@ -81,13 +81,20 @@ export function PremiumProvider({ children }) {
 
   // -------- Boot: init SDK, load current entitlement, load offerings --------
   useEffect(() => {
+    // Skip boot until the user is authenticated. This prevents a stray 401
+    // console error from firing /api/premium/status before login.
+    if (!user?.user_id) {
+      setLoading(false);
+      setStatus(initialStatus);
+      return undefined;
+    }
     let alive = true;
     (async () => {
       setLoading(true);
       const native = isPurchasesAvailable();
       setServicesAvailable(native);
 
-      if (native && user?.user_id) {
+      if (native) {
         const initResult = await initPurchases(user.user_id);
         if (!initResult.ok) {
           logError("initPurchases", initResult.reason);

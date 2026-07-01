@@ -48,6 +48,16 @@ Build a trivia app called Kite with:
 | Shop / Stripe Checkout | Working (Apple Pay, Google Pay, Visa, MC) |
 
 ## What's Been Implemented
+- 2026-02-17 — **Mobile Paywall (Capacitor + RevenueCat + Free Tier) — Iteration 11**:
+  - Free tier: 3 rounds/day (`FREE_ROUNDS_PER_DAY=3`); premium bypasses. UTC-midnight rollover.
+  - Premium model: monthly + yearly auto-renewing subscriptions. Product IDs (placeholders): `kite_premium_monthly`, `kite_premium_yearly`. Entitlement id: `kite_premium`.
+  - **Backend** (`server.py`): User model extended (`is_premium`, `premium_source`, `premium_product_id`, `premium_expires_at`, `premium_updated_at`, `rounds_played_today`, `last_round_date`). Free-tier gate at `/api/questions` returns HTTP 402 with structured detail. New endpoints: `GET /api/premium/status`, `POST /api/premium/sync`, `POST /api/premium/webhook` (stub — TODO signature verification when secret arrives).
+  - **Frontend**: `capacitor.config.json` + Capacitor 7 packages installed. `@revenuecat/purchases-capacitor` SDK. New `src/lib/purchases.js` (web-safe wrapper), `src/contexts/PremiumContext.jsx` (auth-gated boot, no more 401 noise), `src/components/Paywall.jsx` (benefits + plan picker + restore). `Play.jsx` handles 402 with soft free-tier gate. `Dashboard.jsx` shows Sparkles nav badge with remaining free rounds.
+  - **Stripe web shop untouched.** Gameplay, XP curve, UI, question DB (2193), audio, sky themes all preserved.
+  - **Verified (iter 11)**: 42/42 pytest PASS (4 new premium tests + 38 existing). Testing agent 100% frontend PASS. Paywall correctly shows "unavailable on web" state; iOS/Android will show localized RevenueCat prices when built with store credentials.
+  - **Documentation**: `/app/README-mobile.md` — exact product IDs to create in App Store Connect + Google Play Console, env vars, testing steps for both sandbox stores.
+
+
 - 2026-02-17 — **Security-Only Iteration (2 HIGH-severity fixes)**:
   - **Finding 1 (CSRF)**: `SameSite=None` on all 3 auth cookies (register / login / session-exchange, `server.py` lines 225 / 264 / 362). Changed to `SameSite=Lax` — frontend and backend are same-origin so Lax fully preserves the auth flow while blocking cross-site cookie transmission.
   - **Finding 2 (CWE-601 Open Redirect)**: `POST /api/characters/purchase` accepted client-supplied `origin_url` and reflected it into Stripe's `success_url`/`cancel_url`. Added `_resolve_safe_origin(candidate, request)` helper (~L925) that validates against the `CORS_ORIGINS` allowlist + anchored `CORS_ORIGIN_REGEX`. Non-http(s), suffix-attack, `javascript:`, protocol-relative and unknown origins fall back to `request.base_url` (backend-derived, safe by construction).
