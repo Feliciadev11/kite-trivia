@@ -85,7 +85,7 @@ export default function DashboardPage() {
                 ? "text-emerald-600 hover:bg-emerald-50"
                 : "text-amber-600 hover:bg-amber-50"}`}
               data-testid="nav-premium"
-              title={is_premium ? "Manage your Kite Pro subscription" : "Unlock Kite Pro"}
+              title={is_premium ? "Manage your Kite subscription" : "Unlock the full experience"}
             >
               <Sparkles className="w-5 h-5" />
               {!is_premium && rounds_remaining_today !== null && rounds_remaining_today !== undefined && (

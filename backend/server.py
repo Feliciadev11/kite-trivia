@@ -566,7 +566,7 @@ async def get_questions(
                 status_code=402,
                 detail={
                     "code": "free_tier_limit_reached",
-                    "message": f"You've played {FREE_ROUNDS_PER_DAY} rounds today. Unlock Kite Pro for unlimited flights.",
+                    "message": f"You've played {FREE_ROUNDS_PER_DAY} rounds today. Unlock the full experience for unlimited flights.",
                     "rounds_played_today": rounds_today,
                     "free_rounds_per_day": FREE_ROUNDS_PER_DAY,
                 },

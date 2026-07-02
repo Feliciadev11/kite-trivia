@@ -138,7 +138,7 @@ export default function PlayPage() {
             {freeGate.message || `You've played ${freeGate.rounds_played_today}/${freeGate.free_rounds_per_day} rounds today.`}
           </p>
           <p className="text-sky-500 text-sm mb-6">
-            Rest your wings until tomorrow — or unlock Kite Pro for unlimited flights.
+            Rest your wings until tomorrow — or unlock the full experience for unlimited flights.
           </p>
           <div className="flex flex-col gap-3">
             <Button
@@ -147,7 +147,7 @@ export default function PlayPage() {
               data-testid="free-gate-upgrade-btn"
             >
               <Sparkles className="w-4 h-4 mr-2" />
-              Unlock Kite Pro
+              Continue
             </Button>
             <Button
               variant="ghost"

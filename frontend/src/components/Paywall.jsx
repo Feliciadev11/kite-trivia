@@ -7,10 +7,10 @@ import { usePremium } from "../contexts/PremiumContext";
 import { toast } from "sonner";
 
 const BENEFITS = [
-  { Icon: InfinityIcon, label: "Unlimited daily rounds — never hit the free cap" },
-  { Icon: Palette,      label: "All sky themes unlocked, including seasonal ones" },
+  { Icon: InfinityIcon, label: "Unlimited trivia — every round, every day" },
+  { Icon: Palette,      label: "Exclusive skies + seasonal releases" },
   { Icon: Heart,        label: "Every kite & companion in your collection" },
-  { Icon: Sparkles,     label: "First access to future dreamy features" },
+  { Icon: Sparkles,     label: "Every future update, included" },
 ];
 
 /**
@@ -40,7 +40,7 @@ export const Paywall = () => {
   const handlePurchase = async () => {
     const result = await purchase(selected);
     if (result.ok) {
-      toast.success("Welcome to Kite Pro — your skies are wide open ✨");
+      toast.success("The full sky is open. Thank you for supporting Kite ✨");
       closePaywall();
       return;
     }
@@ -83,10 +83,10 @@ export const Paywall = () => {
           </motion.div>
 
           <DialogTitle className="text-2xl font-semibold text-sky-900">
-            Kite Pro
+            Unlock the Full Experience
           </DialogTitle>
           <DialogDescription className="text-sky-600 mt-1">
-            Unlimited flights across a wider sky
+            Unlimited trivia, exclusive skies, premium themes, and every future update.
           </DialogDescription>
         </div>
 
@@ -94,7 +94,7 @@ export const Paywall = () => {
         {is_premium && (
           <div className="px-6 pb-6 text-center" data-testid="paywall-already-premium">
             <p className="text-emerald-600 font-medium mb-4">
-              You're a Kite Pro member. Thank you 🪁
+              The full experience is yours. Thank you for supporting Kite 🪁
             </p>
             <Button onClick={closePaywall} className="rounded-full">Close</Button>
           </div>
@@ -120,8 +120,8 @@ export const Paywall = () => {
                 className="mx-6 mt-5 px-4 py-3 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-sm text-center"
                 data-testid="paywall-web-notice"
               >
-                Kite Pro is purchased through the App Store or Google Play.
-                Open Kite on your iOS or Android device to subscribe.
+                The full experience is unlocked through the App Store or Google Play.
+                Open Kite on your iOS or Android device to continue.
               </div>
             )}
 
@@ -171,7 +171,7 @@ export const Paywall = () => {
                   {purchasing ? (
                     <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Processing…</>
                   ) : (
-                    <>Unlock Kite Pro</>
+                    <>Continue</>
                   )}
                 </Button>
               )}

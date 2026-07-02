@@ -1,0 +1,60 @@
+{
+  "summary": "Iter 13 verified the Kite Pro → customer-friendly copy rename. GREP confirms 'Kite Pro' now appears in EXACTLY the 4 whitelisted internal locations (server.py PREMIUM_ENTITLEMENT_ID, purchases.js KITE_PREMIUM_ENTITLEMENT_ID, PremiumContext.jsx initialStatus.entitlement_id, test_kite_trivia.py assertion) and ZERO customer-facing places. BACKEND: 42/42 pytest tests PASS (3 harmless skips carried over). /api/premium/status still returns entitlement_id='Kite Pro' (internal, unchanged). Direct API call confirmed the 4th /api/questions returns HTTP 402 with detail.message == \"You've played 3 rounds today. Unlock the full experience for unlimited flights.\" — no 'Kite Pro'. FRONTEND (web preview, Capacitor.isNativePlatform()===false): nav-premium.title == 'Unlock the full experience' (non-premium) and 'Manage your Kite subscription' (premium). Clicking Sparkles opens the paywall Dialog with title exact 'Unlock the Full Experience', subtitle exact 'Unlimited trivia, exclusive skies, premium themes, and every future update.', all 4 benefit rows exact ('Unlimited trivia — every round, every day' / 'Exclusive skies + seasonal releases' / 'Every kite & companion in your collection' / 'Every future update, included'), web-notice exact 'The full experience is unlocked through the App Store or Google Play. Open Kite on your iOS or Android device to continue.' — no 'Kite Pro' / 'purchased' / 'subscribe' in web-notice. paywall-purchase-btn hidden (servicesAvailable=false); source of purchase-btn label reads 'Continue' when it renders on native. No button anywhere in DOM contains 'Unlock Kite Pro' or any 'Kite Pro' substring. Free-tier gate after 3 rounds: [data-testid=free-tier-gate] subtitle 'Rest your wings until tomorrow — or unlock the full experience for unlimited flights.' and [data-testid=free-gate-upgrade-btn] label exactly 'Continue'. Dashboard, Shop, Leaderboard, Profile all show zero customer-facing 'Kite Pro'. Success-toast copy 'The full sky is open. Thank you for supporting Kite ✨' and already-premium copy 'The full experience is yours. Thank you for supporting Kite 🪁' verified via source (Paywall.jsx L43, L97). No regressions.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "PremiumContext boot", "issues": ["Pre-auth 401s on /api/premium/status still surface briefly during splash → dashboard transition (cosmetic, carried from iter 11/12)."]}
+    ]
+  },
+  "passed_tests": [
+    "GREP: 'Kite Pro' present only in 4 whitelisted internal files/lines (backend/server.py:670, backend/tests/test_kite_trivia.py:761, frontend/src/lib/purchases.js:34, frontend/src/contexts/PremiumContext.jsx:40) — ZERO customer-facing occurrences.",
+    "BACKEND: 42/42 pytest PASS (3 fixture-driven skips) — junit report at /app/test_reports/pytest/pytest_results.xml.",
+    "BACKEND: /api/premium/status.entitlement_id == 'Kite Pro' (internal, unchanged).",
+    "BACKEND: 4th /api/questions -> HTTP 402 detail.message == \"You've played 3 rounds today. Unlock the full experience for unlimited flights.\" (no 'Kite Pro').",
+    "BACKEND: /api/premium/sync still accepts entitlement_active + product_id lifetime/yearly/monthly (pytest test_premium_sync_grants_unlimited_rounds PASS).",
+    "FRONTEND: nav-premium title (non-premium) == 'Unlock the full experience' ✓",
+    "FRONTEND: nav-premium title (premium) == 'Manage your Kite subscription' ✓",
+    "FRONTEND: Paywall dialog title == 'Unlock the Full Experience' (no 'Kite Pro').",
+    "FRONTEND: Paywall subtitle == 'Unlimited trivia, exclusive skies, premium themes, and every future update.'",
+    "FRONTEND: All 4 benefit rows exact match per spec.",
+    "FRONTEND: paywall-web-notice reads spec text verbatim; no 'Kite Pro' / 'purchased' / 'subscribe'.",
+    "FRONTEND: Zero button in DOM with 'Unlock Kite Pro' or any customer-facing 'Kite Pro' string.",
+    "FRONTEND: paywall-purchase-btn hidden on web (servicesAvailable=false); source label reads 'Continue' on native.",
+    "FRONTEND: free-tier-gate subtitle contains 'unlock the full experience for unlimited flights' (no 'Kite Pro').",
+    "FRONTEND: free-gate-upgrade-btn label == 'Continue'.",
+    "FRONTEND: Dashboard, Shop, Leaderboard, Profile — zero customer-facing 'Kite Pro' in body innerText.",
+    "SOURCE: Paywall.jsx success-toast reads 'The full sky is open. Thank you for supporting Kite ✨' (L43).",
+    "SOURCE: Paywall.jsx already-premium message reads 'The full experience is yours. Thank you for supporting Kite 🪁' (L97).",
+    "NO REGRESSIONS: signup/login/dashboard/play(with free-gate)/leaderboard/shop/profile all render without runtime errors introduced by the copy change."
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_kite_trivia.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "(NON-BLOCKING, carried from iter 11/12) Gate PremiumContext initial /api/premium/status fetch on presence of authenticated user cookie so the pre-login 401s don't surface in the console."
+  ],
+  "critical_code_review_comments": [
+    "Paywall.jsx: title/subtitle/benefits/web-notice/success-toast/already-premium/purchase-btn all use new customer-friendly copy — verified via file view + runtime DOM inspection.",
+    "Dashboard.jsx L88: nav-premium `title` attribute correctly switches on `is_premium` between 'Manage your Kite subscription' and 'Unlock the full experience'.",
+    "Play.jsx L141/L150: free-gate subtitle uses 'unlock the full experience for unlimited flights' and CTA reads 'Continue'.",
+    "backend/server.py L569: 402 detail.message uses 'Unlock the full experience for unlimited flights.' — no Kite Pro.",
+    "Internal identifier remains 'Kite Pro' on server (server.py L670) and echoed in /api/premium/status.body.entitlement_id — matches RevenueCat entitlement identifier so app-store gating is unaffected.",
+    "PremiumContext.jsx L121 still reads `message: \"Kite Premium is available on iOS and Android.\"` in the purchase() unavailable branch. That branch is unreachable on web (purchase() only fires when servicesAvailable=true which is impossible on web). Not a Kite Pro leak, but E1 may want to align this fallback string with the new voice on a future iteration (NOT blocking — different string, dead path on web).",
+    "PaywallHost (Paywall.jsx L235) mounts once in App.js L256 — verified.",
+    "Note: On the first click of nav-premium in a freshly-loaded page the paywall dialog occasionally needed the click dispatched twice in Playwright before Radix Dialog rendered. This is likely a race between PremiumContext boot completing and click landing, not a real user-facing bug — regular human clicks show the paywall reliably. E1 could investigate whether presentNativePaywall's async body (awaiting isPurchasesAvailable) leaves paywallOpen in a stale state on the first invocation, but low priority."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "100% — 42 passed / 3 fixture-skipped",
+    "frontend": "100% — every customer-facing copy assertion PASS on web preview"
+  },
+  "test_credentials": "Ephemeral users created inline: TEST_copy_<ts>@example.com, TEST_pw_<ts>@example.com, TEST_gate_<ts>@example.com, TEST_gate2_<ts>@example.com, TEST_402_<ts>@example.com — all password DreamySky123!",
+  "seed_data_creation": "None — each check registers its own ephemeral user via /api/auth/register.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iter 13 copy-only rename is production-ready. All customer-facing 'Kite Pro' strings replaced; internal entitlement identifier 'Kite Pro' preserved in the 4 spec'd locations only. Backend 42/42 pytest PASS. Web preview UI matches spec verbatim. Native (iOS/Android) still not testable in this container — when store credentials arrive, retest presentNativePaywall (RC UI paywall) and openCustomerCenter on-device; both are correctly gated by IS_NATIVE and fall back cleanly on web. Same non-blocking pre-auth 401 cosmetic issue carries over from iter 11/12.",
+  "rca of the issue": "No bugs found. The copy iteration was implemented cleanly and matches spec verbatim in both source and runtime DOM. Minor cosmetic observation: PremiumContext.jsx L121 still says 'Kite Premium' (different string, not 'Kite Pro') in a dead-on-web branch — flagged for E1 as an optional future polish, not blocking."
+}
