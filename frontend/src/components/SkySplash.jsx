@@ -10,6 +10,11 @@ export const SkySplash = () => {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+    // App-store reviewers and shared links to legal pages must land directly
+    // on the content — never show the splash overlay on public /privacy or
+    // /terms routes.
+    const path = window.location.pathname || "";
+    if (path === "/privacy" || path === "/terms") return;
     const seen = localStorage.getItem(SPLASH_KEY) === "true";
     if (!seen) setShow(true);
   }, []);

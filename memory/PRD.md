@@ -48,6 +48,16 @@ Build a trivia app called Kite with:
 | Shop / Stripe Checkout | Working (Apple Pay, Google Pay, Visa, MC) |
 
 ## What's Been Implemented
+- 2026-02-17 — **Public Legal Pages (Iteration 14)**:
+  - `/privacy` — Privacy Policy covering Apple App Store + Google Play + RevenueCat, gameplay data, analytics, purchases, children's privacy, security, data retention, App Store App Privacy label + Play Data Safety disclosures.
+  - `/terms` — Terms of Service covering monthly/yearly/lifetime subs, Apple/Google cancellation flows, refunds, restore purchases, acceptable use, IP, liability limitation, indemnity, governing law, third-party terms links.
+  - Shared `LegalLayout` uses Kite's sky-gradient + glass-card aesthetic; "Back to Kite" link in header; Privacy · Terms footer cross-link.
+  - `SkySplash` suppressed on `/privacy` and `/terms` so App Store reviewers land directly on the legal content (other routes still show splash to fresh visitors).
+  - Landing footer now has small Privacy · Terms links.
+  - Zero backend changes; zero gameplay/paywall/RevenueCat changes.
+  - **Verified (iter 14)**: testing agent 100% frontend PASS. Live browser test confirms `H1='Privacy Policy'` on /privacy and `H1='Terms of Service'` on /terms with no splash overlay, and no regression to splash on /.
+
+
 - 2026-02-17 — **Customer-facing copy rename (Iteration 13)**:
   - User decision: "Kite Pro" is an internal identifier only; every visible reference replaced with warm, invitational brand copy.
   - Paywall dialog: title `Unlock the Full Experience`, subtitle `Unlimited trivia, exclusive skies, premium themes, and every future update.`, benefits refreshed, purchase button label `Continue`.
