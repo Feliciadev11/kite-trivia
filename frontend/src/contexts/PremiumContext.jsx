@@ -118,7 +118,7 @@ export function PremiumProvider({ children }) {
   // -------- Purchase --------
   const purchase = useCallback(async (which /* "monthly" | "yearly" */) => {
     if (!servicesAvailable) {
-      return { ok: false, reason: "unavailable", message: "Kite Premium is available on iOS and Android." };
+      return { ok: false, reason: "unavailable", message: "The full experience is unlocked on iOS and Android." };
     }
     const pkg = offerings?.packages?.[which];
     if (!pkg) {

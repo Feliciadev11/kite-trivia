@@ -48,6 +48,18 @@ Build a trivia app called Kite with:
 | Shop / Stripe Checkout | Working (Apple Pay, Google Pay, Visa, MC) |
 
 ## What's Been Implemented
+- 2026-02-17 — **Customer-facing copy rename (Iteration 13)**:
+  - User decision: "Kite Pro" is an internal identifier only; every visible reference replaced with warm, invitational brand copy.
+  - Paywall dialog: title `Unlock the Full Experience`, subtitle `Unlimited trivia, exclusive skies, premium themes, and every future update.`, benefits refreshed, purchase button label `Continue`.
+  - Web notice: `The full experience is unlocked through the App Store or Google Play. Open Kite on your iOS or Android device to continue.`
+  - Dashboard Sparkles tooltip: `Unlock the full experience` (non-premium) / `Manage your Kite subscription` (premium).
+  - Play free-gate CTA now `Continue`; subtitle uses "unlock the full experience for unlimited flights".
+  - Backend 402 detail message updated to match.
+  - Success toast → `The full sky is open. Thank you for supporting Kite ✨` and already-premium → `The full experience is yours. Thank you for supporting Kite 🪁`.
+  - "Kite Pro" now appears in exactly 4 whitelisted internal locations: `server.py`, `purchases.js`, `PremiumContext.jsx` default state, one test assertion — all internal identifiers, zero customer-facing.
+  - **Verified (iter 13)**: 42/42 pytest PASS. Testing agent 100% frontend + backend PASS with explicit grep confirmation of no customer-facing "Kite Pro" leakage.
+
+
 - 2026-02-17 — **RevenueCat Integration — Kite Pro (Iteration 12)**:
   - **Clarification given to user**: Kite is a Capacitor app (not React Native), so used `@revenuecat/purchases-capacitor` + `@revenuecat/purchases-capacitor-ui` (same feature set as `react-native-purchases`, works with our stack).
   - Entitlement identifier: **`Kite Pro`** (backend + frontend + tests).

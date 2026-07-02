@@ -14,7 +14,7 @@ const BENEFITS = [
 ];
 
 /**
- * Kite Premium paywall — used across mobile IAP and the (future) web sub flow.
+ * Paywall dialog — used across mobile IAP and the (future) web sub flow.
  * Read-only usage: `usePremium().openPaywall()` from anywhere.
  */
 export const Paywall = () => {
