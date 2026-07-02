@@ -18,7 +18,10 @@ import { usePremium } from "../contexts/PremiumContext";
 export default function DashboardPage() {
   const navigate = useNavigate();
   const { user, logout, refreshUser } = useAuth();
-  const { is_premium, rounds_remaining_today, openPaywall } = usePremium();
+  const {
+    is_premium, rounds_remaining_today,
+    presentNativePaywall, openCustomerCenter,
+  } = usePremium();
   const [dailyReward, setDailyReward] = useState(null);
   const [claimingReward, setClaimingReward] = useState(false);
 
@@ -77,12 +80,12 @@ export default function DashboardPage() {
             <Button
               variant="ghost"
               size="sm"
-              onClick={openPaywall}
+              onClick={() => (is_premium ? openCustomerCenter() : presentNativePaywall())}
               className={`rounded-full ${is_premium
                 ? "text-emerald-600 hover:bg-emerald-50"
                 : "text-amber-600 hover:bg-amber-50"}`}
               data-testid="nav-premium"
-              title={is_premium ? "Premium active" : "Unlock Kite Premium"}
+              title={is_premium ? "Manage your Kite Pro subscription" : "Unlock Kite Pro"}
             >
               <Sparkles className="w-5 h-5" />
               {!is_premium && rounds_remaining_today !== null && rounds_remaining_today !== undefined && (

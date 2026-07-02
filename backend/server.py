@@ -566,7 +566,7 @@ async def get_questions(
                 status_code=402,
                 detail={
                     "code": "free_tier_limit_reached",
-                    "message": f"You've played {FREE_ROUNDS_PER_DAY} rounds today. Unlock Kite Premium for unlimited flights.",
+                    "message": f"You've played {FREE_ROUNDS_PER_DAY} rounds today. Unlock Kite Pro for unlimited flights.",
                     "rounds_played_today": rounds_today,
                     "free_rounds_per_day": FREE_ROUNDS_PER_DAY,
                 },
@@ -667,7 +667,7 @@ async def get_questions(
 # =========================================================================
 
 FREE_ROUNDS_PER_DAY = 3
-PREMIUM_ENTITLEMENT_ID = "kite_premium"  # matches RevenueCat entitlement identifier
+PREMIUM_ENTITLEMENT_ID = "Kite Pro"  # matches RevenueCat entitlement identifier
 
 class PremiumSyncPayload(BaseModel):
     """Sent by the mobile client after RevenueCat state changes.

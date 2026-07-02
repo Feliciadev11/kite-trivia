@@ -1,0 +1,60 @@
+{
+  "summary": "Iter 12 validated the RevenueCat 'Kite Pro' rename + Capacitor UI SDK (native paywall + Customer Center) additions. BACKEND: all 42 pytest tests still PASS (3 harmless skips) — /api/premium/status returns entitlement_id='Kite Pro' (renamed from 'kite_premium'); /api/premium/sync accepts product_id='lifetime', 'yearly', and 'monthly' and flips is_premium=true idempotently; 4th /api/questions returns HTTP 402 with detail.code='free_tier_limit_reached' and message 'You've played 3 rounds today. Unlock Kite Pro for unlimited flights.' (contains 'Kite Pro' as required). FRONTEND (web preview @ Capacitor.isNativePlatform()===false): nav-premium Sparkles renders with badge '3' + title='Unlock Kite Pro' for new user and opens paywall on click; paywall title = 'Kite Pro' (no stray 'Kite Premium'); all 4 benefit rows present; web-notice reads 'Kite Pro is purchased through the App Store or Google Play. Open Kite on your iOS or Android device to subscribe.'; plan-lifetime/plan-yearly/plan-monthly all absent from DOM (expected — plan picker gated by servicesAvailable=false); purchase-btn hidden; restore-btn disabled. After POST /api/premium/sync {entitlement_active:true,product_id:'lifetime'} + reload → nav-premium class contains 'emerald', badge text is empty, title='Manage your Kite Pro subscription'; clicking Sparkles as premium user is a NOOP (no dialog opens, openCustomerCenter returns unavailable on web — no crashes). Downgrading via /premium/sync {entitlement_active:false} + playing 3 rounds surfaces [data-testid=free-tier-gate] with [data-testid=free-gate-upgrade-btn] copy 'Unlock Kite Pro'. Zero 'RevenueCatUI is not defined' or capacitor-ui import errors in the browser console — the dynamic ui import is correctly short-circuited by IS_NATIVE guard. No regressions in Stripe web shop, XP, leaderboard, forgot/reset password, CORS, cookie hardening.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "PremiumContext boot", "issues": ["Pre-auth 401s on /api/premium/status still appear on splash → signup path (cosmetic, carried over from iter 11)."]}
+    ]
+  },
+  "passed_tests": [
+    "BACKEND: 42/42 pytest tests PASS (3 skipped: purchase_and_equip_kite / purchase_paid_item_returns_session_url / purchase_with_evil_origin_url_does_not_reflect_it — all skip conditions per fixture state, none are failures)",
+    "BACKEND: test_premium_status_shape — /api/premium/status.entitlement_id == 'Kite Pro' (updated from 'kite_premium')",
+    "BACKEND: /premium/sync with product_id='lifetime' flips is_premium=true (custom check)",
+    "BACKEND: /premium/sync with product_id='yearly' works",
+    "BACKEND: /premium/sync with product_id='monthly' works",
+    "BACKEND: 4th /api/questions -> HTTP 402 with detail.message containing 'Kite Pro' ('You've played 3 rounds today. Unlock Kite Pro for unlimited flights.')",
+    "FRONTEND: nav-premium Sparkles icon renders with badge '3' for new user",
+    "FRONTEND: nav-premium.title == 'Unlock Kite Pro' for non-premium",
+    "FRONTEND: Clicking nav-premium opens paywall-dialog on web (fallback path)",
+    "FRONTEND: paywall shows 'Kite Pro' title (no 'Kite Premium' substring)",
+    "FRONTEND: All 4 benefit rows present (Unlimited daily rounds / All sky themes / Every kite & companion / First access to future)",
+    "FRONTEND: paywall-web-notice = 'Kite Pro is purchased through the App Store or Google Play. Open Kite on your iOS or Android device to subscribe.'",
+    "FRONTEND: plan-lifetime / plan-yearly / plan-monthly absent from DOM on web (correctly gated by servicesAvailable=false)",
+    "FRONTEND: paywall-purchase-btn hidden on web",
+    "FRONTEND: paywall-restore-btn present + disabled on web",
+    "FRONTEND: After POST /api/premium/sync {entitlement_active:true,product_id:'lifetime'} + reload → nav-premium class contains 'emerald' and badge text is empty (badge hidden for premium)",
+    "FRONTEND: nav-premium.title == 'Manage your Kite Pro subscription' for premium user",
+    "FRONTEND: Clicking Sparkles as premium user is a NOOP (openCustomerCenter returns {ok:false,reason:'unavailable'} on web — no dialog opens, no crash)",
+    "FRONTEND: free-gate-upgrade-btn copy == 'Unlock Kite Pro' after downgrade + 3 rounds",
+    "FRONTEND: Zero 'RevenueCatUI is not defined' / '@revenuecat/purchases-capacitor-ui' import errors in browser console (dynamic import correctly gated by IS_NATIVE)"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_kite_trivia.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "(NON-BLOCKING, carried from iter 11) Gate PremiumContext initial /api/premium/status fetch on presence of authenticated user cookie so the 2-3 pre-login 401s don't surface in the console."
+  ],
+  "critical_code_review_comments": [
+    "purchases.js correctly guards both core (`@revenuecat/purchases-capacitor`) and UI (`@revenuecat/purchases-capacitor-ui`) modules behind `if (!IS_NATIVE) return { ok:false, reason:'unavailable' }` BEFORE any dynamic import — verified by absence of any capacitor-ui import errors in the web console.",
+    "PremiumContext.presentNativePaywall gracefully falls back to setPaywallOpen(true) (custom Dialog) when !servicesAvailable — verified on web.",
+    "PremiumContext.openCustomerCenter returns {ok:false, reason:'unavailable', message} on web without side-effects — verified by clicking Sparkles as premium user and no dialog appearing.",
+    "server.py L569 correctly names 'Kite Pro' in the 402 free-tier-gate message; server.py L670 defines PREMIUM_ENTITLEMENT_ID='Kite Pro'; server.py L733 emits it in /premium/status. Rename fully applied.",
+    "test_kite_trivia.py L761 was updated in this iter to assert entitlement_id=='Kite Pro' — pytest confirms the assertion holds.",
+    "Backend accepts arbitrary product_id strings in /premium/sync (lifetime/yearly/monthly all accepted — no allow-list check). This is fine since RevenueCat is authoritative, but worth noting that a bad client could persist arbitrary product IDs. NOT a security bug because premium status is only granted when entitlement_active=true and clients can't fake RevenueCat entitlements in production without the server-side webhook.",
+    "Paywall.jsx PlanCard grid uses `grid-cols-3` when servicesAvailable=true — verified via source. On web (servicesAvailable=false) the entire picker block is unmounted so plan-* test-ids don't render, which matches E1 spec."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "100% — 42 passed / 3 skipped (skip reasons: user already owns eligible kite / no eligible paid item / no eligible free item — none are failures)",
+    "frontend": "100% — every asserted paywall + nav-premium behavior verified on web preview"
+  },
+  "test_credentials": "Ephemeral test users: TEST_rc2_<ts>@example.com, TEST_flow_<ts>@example.com, TEST_ext_<ts>@example.com, TEST_gate_<ts>@example.com — all password DreamySky123!",
+  "seed_data_creation": "None — each test uses /api/auth/register to create its own user.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iter 12 RevenueCat rename + Capacitor UI SDK for 'Kite Pro' is production-ready for web preview. Backend: 42/42 pytest tests PASS; product_id lifetime/yearly/monthly all accepted by /premium/sync; entitlement_id='Kite Pro' surfaces everywhere. Frontend: on web preview (Capacitor.isNativePlatform()===false), all RC UI paths short-circuit cleanly — no 'RevenueCatUI is not defined' errors. Native paths (iOS/Android) cannot be tested in this container; when store credentials arrive, retest on-device by verifying: (a) presentNativePaywall calls RC UI paywall (opens managed template), (b) openCustomerCenter opens the Customer Center screen, (c) purchase completes and _pushEntitlementToServer syncs to backend. Same cosmetic action-item as iter 11 remains: PremiumContext fetches /api/premium/status pre-login, generating 2-3 401 console messages on the splash page.",
+  "rca of the issue": "No functional bugs found in this iter. All requested feature checks (backend entitlement rename + product IDs + 402 copy; frontend nav-premium title + Kite Pro copy + plan cards + web-notice + benefits + premium-state visual + Customer Center noop + no import errors + free-gate copy) pass end-to-end. Cosmetic pre-auth 401s carried over from iter 11 remain as noted."
+}

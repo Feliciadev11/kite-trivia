@@ -29,6 +29,7 @@ export const Paywall = () => {
 
   const monthly = offerings?.packages?.monthly;
   const yearly = offerings?.packages?.yearly;
+  const lifetime = offerings?.packages?.lifetime;
 
   const priceLabel = (pkg, fallback) => {
     if (!pkg) return fallback;
@@ -39,7 +40,7 @@ export const Paywall = () => {
   const handlePurchase = async () => {
     const result = await purchase(selected);
     if (result.ok) {
-      toast.success("Welcome to Kite Premium — your skies are wide open ✨");
+      toast.success("Welcome to Kite Pro — your skies are wide open ✨");
       closePaywall();
       return;
     }
@@ -82,7 +83,7 @@ export const Paywall = () => {
           </motion.div>
 
           <DialogTitle className="text-2xl font-semibold text-sky-900">
-            Kite Premium
+            Kite Pro
           </DialogTitle>
           <DialogDescription className="text-sky-600 mt-1">
             Unlimited flights across a wider sky
@@ -93,7 +94,7 @@ export const Paywall = () => {
         {is_premium && (
           <div className="px-6 pb-6 text-center" data-testid="paywall-already-premium">
             <p className="text-emerald-600 font-medium mb-4">
-              You're a Kite Premium member. Thank you 🪁
+              You're a Kite Pro member. Thank you 🪁
             </p>
             <Button onClick={closePaywall} className="rounded-full">Close</Button>
           </div>
@@ -119,23 +120,32 @@ export const Paywall = () => {
                 className="mx-6 mt-5 px-4 py-3 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-sm text-center"
                 data-testid="paywall-web-notice"
               >
-                Kite Premium is purchased through the App Store or Google Play.
+                Kite Pro is purchased through the App Store or Google Play.
                 Open Kite on your iOS or Android device to subscribe.
               </div>
             )}
 
             {/* Plan picker */}
             {servicesAvailable && (
-              <div className="px-6 pt-5 grid grid-cols-2 gap-3">
+              <div className="px-6 pt-5 grid grid-cols-3 gap-2">
                 <PlanCard
                   active={selected === "yearly"}
                   title="Yearly"
                   price={priceLabel(yearly, "—")}
                   badge="Best value"
-                  sub="Save ~40% vs monthly"
+                  sub="Save vs monthly"
                   disabled={!yearly}
                   onSelect={() => setSelected("yearly")}
                   testId="plan-yearly"
+                />
+                <PlanCard
+                  active={selected === "lifetime"}
+                  title="Lifetime"
+                  price={priceLabel(lifetime, "—")}
+                  sub="One-time"
+                  disabled={!lifetime}
+                  onSelect={() => setSelected("lifetime")}
+                  testId="plan-lifetime"
                 />
                 <PlanCard
                   active={selected === "monthly"}
@@ -161,7 +171,7 @@ export const Paywall = () => {
                   {purchasing ? (
                     <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Processing…</>
                   ) : (
-                    <>Unlock Premium</>
+                    <>Unlock Kite Pro</>
                   )}
                 </Button>
               )}

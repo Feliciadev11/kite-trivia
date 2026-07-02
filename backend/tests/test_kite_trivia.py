@@ -758,7 +758,7 @@ def test_premium_status_shape():
         "entitlement_id",
     ]:
         assert key in body, f"missing key {key} in status body: {body}"
-    assert body["entitlement_id"] == "kite_premium"
+    assert body["entitlement_id"] == "Kite Pro"
     assert body["free_rounds_per_day"] == 3
     assert body["is_premium"] is False
     assert body["rounds_remaining_today"] == 3

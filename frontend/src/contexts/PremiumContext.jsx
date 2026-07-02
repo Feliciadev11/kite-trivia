@@ -9,6 +9,9 @@ import {
   restorePurchases as rcRestore,
   getOfferings,
   isPurchasesAvailable,
+  presentPaywall as rcPresentPaywall,
+  presentCustomerCenter as rcPresentCustomerCenter,
+  KITE_PREMIUM_ENTITLEMENT_ID,
 } from "../lib/purchases";
 
 /**
@@ -34,7 +37,7 @@ const initialStatus = {
   free_rounds_per_day: 3,
   rounds_played_today: 0,
   rounds_remaining_today: 3,
-  entitlement_id: "kite_premium",
+  entitlement_id: "Kite Pro",
 };
 
 export function PremiumProvider({ children }) {
@@ -158,6 +161,48 @@ export function PremiumProvider({ children }) {
   const openPaywall = useCallback(() => setPaywallOpen(true), []);
   const closePaywall = useCallback(() => setPaywallOpen(false), []);
 
+  // -------- Native RevenueCat Paywall UI --------
+  // Preferred entry point on mobile. Falls back to our custom Dialog on web.
+  const presentNativePaywall = useCallback(async () => {
+    if (!servicesAvailable) {
+      setPaywallOpen(true); // fall back to web-safe custom dialog
+      return { ok: false, reason: "unavailable" };
+    }
+    const result = await rcPresentPaywall({
+      requiredEntitlementIdentifier: KITE_PREMIUM_ENTITLEMENT_ID,
+    });
+    if (result.ok && result.entitlementActive) {
+      await _pushEntitlementToServer({
+        ok: true,
+        entitlementActive: true,
+        productId: result.productId,
+        expiresAt: result.expiresAt,
+      });
+    }
+    return result;
+  }, [servicesAvailable, _pushEntitlementToServer]);
+
+  // -------- Customer Center (App Store / Play review requirement) --------
+  const openCustomerCenter = useCallback(async () => {
+    if (!servicesAvailable) {
+      return {
+        ok: false,
+        reason: "unavailable",
+        message: "Manage your subscription from the App Store or Google Play on your device.",
+      };
+    }
+    const result = await rcPresentCustomerCenter();
+    if (result.ok) {
+      await _pushEntitlementToServer({
+        ok: true,
+        entitlementActive: !!result.entitlementActive,
+        productId: result.productId,
+        expiresAt: result.expiresAt,
+      });
+    }
+    return result;
+  }, [servicesAvailable, _pushEntitlementToServer]);
+
   const value = {
     // State
     ...status,
@@ -165,7 +210,7 @@ export function PremiumProvider({ children }) {
     purchasing,
     restoring,
     servicesAvailable,
-    offerings, // { ok, packages: {monthly, yearly}, offeringIdentifier }
+    offerings, // { ok, packages: {monthly, yearly, lifetime}, offeringIdentifier }
     paywallOpen,
     // Actions
     refreshServerStatus,
@@ -173,6 +218,8 @@ export function PremiumProvider({ children }) {
     restore,
     openPaywall,
     closePaywall,
+    presentNativePaywall,
+    openCustomerCenter,
   };
 
   return <PremiumContext.Provider value={value}>{children}</PremiumContext.Provider>;

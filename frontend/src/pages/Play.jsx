@@ -16,7 +16,7 @@ export default function PlayPage() {
   const navigate = useNavigate();
   const { user, refreshUser } = useAuth();
   const { playSoundEffect } = useAudio();
-  const { openPaywall, refreshServerStatus } = usePremium();
+  const { presentNativePaywall, refreshServerStatus } = usePremium();
   const [questions, setQuestions] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState(null);
@@ -138,16 +138,16 @@ export default function PlayPage() {
             {freeGate.message || `You've played ${freeGate.rounds_played_today}/${freeGate.free_rounds_per_day} rounds today.`}
           </p>
           <p className="text-sky-500 text-sm mb-6">
-            Rest your wings until tomorrow — or unlock Kite Premium for unlimited flights.
+            Rest your wings until tomorrow — or unlock Kite Pro for unlimited flights.
           </p>
           <div className="flex flex-col gap-3">
             <Button
-              onClick={openPaywall}
+              onClick={presentNativePaywall}
               className="rounded-full bg-gradient-to-r from-sky-500 to-indigo-500 hover:from-sky-600 hover:to-indigo-600"
               data-testid="free-gate-upgrade-btn"
             >
               <Sparkles className="w-4 h-4 mr-2" />
-              Unlock Kite Premium
+              Unlock Kite Pro
             </Button>
             <Button
               variant="ghost"

@@ -1,198 +1,194 @@
 # Kite — Mobile Paywall Setup (Capacitor + RevenueCat)
 
-This document tells you the exact steps and identifiers to configure once you
-have your Apple Developer and Google Play Console accounts. All source code
-is already in place — nothing to write, only IDs to plug in.
+Capacitor app with RevenueCat handling Apple App Store + Google Play billing,
+plus RevenueCat's native Paywall UI and Customer Center. Source code is
+complete; this doc lists the exact IDs to configure once your Apple / Google
+accounts exist.
 
 ---
 
-## 1. Product identifiers you need to create
+## 1. Fixed identifiers (already wired in code)
 
-### RevenueCat (create first — RevenueCat drives the other two stores)
+| Item | Value | Where |
+|---|---|---|
+| RevenueCat entitlement | **`Kite Pro`** | Server + `src/lib/purchases.js` |
+| Bundle / Package | **`com.kitetrivia.app`** | `capacitor.config.json` |
+| Product ID — lifetime | **`lifetime`** | `src/lib/purchases.js` |
+| Product ID — yearly | **`yearly`** | `src/lib/purchases.js` |
+| Product ID — monthly | **`monthly`** | `src/lib/purchases.js` |
+| Test API key (dev) | `test_zbkylBVKIMySdYkgspQwisDwjTN` | Fallback in `src/lib/purchases.js` |
+| Free-tier rounds/day | **3** (server-enforced) | `backend/server.py` `FREE_ROUNDS_PER_DAY` |
 
-1. Sign up at https://app.revenuecat.com and create a Project called **Kite**.
-2. Under **Project settings → API keys**, copy:
-   - **iOS SDK key** → set in `frontend/.env` as `REACT_APP_REVENUECAT_IOS_KEY`
-   - **Android SDK key** → set in `frontend/.env` as `REACT_APP_REVENUECAT_ANDROID_KEY`
-3. Under **Products → New product**, create these two products (identifiers **must** match exactly):
-   - `kite_premium_monthly` — auto-renewing subscription, monthly
-   - `kite_premium_yearly`  — auto-renewing subscription, yearly
-4. Under **Entitlements → New entitlement**, create:
-   - Identifier: `kite_premium`  ← **must match** `KITE_PREMIUM_ENTITLEMENT_ID` in `src/lib/purchases.js`
-   - Attach both products (`kite_premium_monthly` and `kite_premium_yearly`) to this entitlement.
-5. Under **Offerings → Current**, create an offering with two packages:
-   - `$rc_monthly` package → attach `kite_premium_monthly`
-   - `$rc_annual`  package → attach `kite_premium_yearly`
-6. Under **Integrations → Webhooks**, set the URL:
-   - `https://<your-backend-domain>/api/premium/webhook`
-   - Copy the **webhook secret** for later — add it to `backend/.env` as `REVENUECAT_WEBHOOK_SECRET`.
+---
 
-### Apple App Store Connect
+## 2. RevenueCat setup (do this first — it drives the stores)
 
-1. Enroll in the Apple Developer Program ($99/yr).
-2. In App Store Connect → **Apps → New App**:
-   - Bundle ID: `com.kitetrivia.app` (matches `capacitor.config.json` `appId`)
+1. Sign in to https://app.revenuecat.com. Under **Projects → New Project**,
+   create a project called **Kite**.
+2. **API keys** (Project settings → API keys). Copy:
+   - iOS SDK key → `REACT_APP_REVENUECAT_IOS_KEY` in `frontend/.env`
+   - Android SDK key → `REACT_APP_REVENUECAT_ANDROID_KEY` in `frontend/.env`
+   - The test key `test_zbkylBVKIMySdYkgspQwisDwjTN` is used as a fallback if
+     these aren't set, so you can test in the RevenueCat sandbox immediately.
+3. **Entitlement**: Entitlements → **New entitlement** → identifier
+   **`Kite Pro`** (must match exactly — case-sensitive).
+4. **Products**: Products → **New product** → create three, each attached to
+   the `Kite Pro` entitlement:
+   - `lifetime` — non-consumable
+   - `yearly`   — auto-renewing subscription (annual)
+   - `monthly`  — auto-renewing subscription (monthly)
+5. **Offering**: Offerings → **Current** → create packages:
+   - `$rc_lifetime` → `lifetime`
+   - `$rc_annual`   → `yearly`
+   - `$rc_monthly`  → `monthly`
+6. **Paywall template**: Paywalls → **New paywall** → attach to the current
+   offering. Design in the dashboard (colors, hero, benefits). The Capacitor
+   UI SDK renders this template natively via
+   `RevenueCatUI.presentPaywall({ requiredEntitlementIdentifier: "Kite Pro" })`.
+7. **Customer Center**: Customer Center → enable → configure the reasons /
+   help articles you want shown to subscribers who tap "Manage subscription".
+8. **Webhook**: Integrations → Webhooks → set URL
+   `https://<your-backend>/api/premium/webhook`. Copy the signing secret to
+   `backend/.env` as `REVENUECAT_WEBHOOK_SECRET` when you're ready to enable
+   verification.
+
+---
+
+## 3. Apple App Store Connect
+
+1. Enroll in the Apple Developer Program.
+2. Apps → **New App**:
+   - Bundle ID: `com.kitetrivia.app`
    - Name: `Kite`
-3. Under **Features → In-App Purchases → +**, create:
-   - Product ID: `kite_premium_monthly`  — Auto-renewable subscription
-   - Product ID: `kite_premium_yearly`   — Auto-renewable subscription
-   - Both go in a subscription group called `Kite Premium`.
-4. Fill in the required review metadata (localized display name, description, price).
-5. Under **App Information → App-Specific Shared Secret**, generate the secret and paste it into RevenueCat → App settings → iOS Apple.
+3. Features → **In-App Purchases → +** and create:
+   - Product ID: **`lifetime`**  — non-consumable
+   - Product ID: **`yearly`**    — auto-renewable subscription, 1 year
+   - Product ID: **`monthly`**   — auto-renewable subscription, 1 month
+   - Put the two subscriptions in a group called `Kite Pro`.
+4. Fill in localized display names, descriptions, and prices for review.
+5. App Store Connect → App Information → **App-Specific Shared Secret** →
+   generate; paste into RevenueCat → App settings → iOS Apple.
 
-### Google Play Console
+---
+
+## 4. Google Play Console
 
 1. Enroll in the Google Play Console ($25 one-time).
 2. Create the app with package name `com.kitetrivia.app`.
-3. Under **Monetize → Subscriptions → Create subscription**, add:
-   - Product ID: `kite_premium_monthly` — auto-renewing monthly
-   - Product ID: `kite_premium_yearly`  — auto-renewing yearly
-4. Under **Setup → API access**, create/link a Google Cloud service account with the **Play Developer API** and grant it access. Download the JSON key and upload it into RevenueCat → App settings → Google Play.
+3. Monetize → **In-app products → Create**:
+   - Product ID: **`lifetime`** (managed / non-consumable)
+4. Monetize → **Subscriptions → Create**:
+   - Product ID: **`yearly`** — auto-renewing yearly base plan
+   - Product ID: **`monthly`** — auto-renewing monthly base plan
+5. Setup → **API access** → link a Google Cloud service account with **Play
+   Developer API** access. Download the JSON key and upload to RevenueCat →
+   App settings → Google Play.
 
 ---
 
-## 2. Environment variables
+## 5. Environment variables
 
 ### `frontend/.env`
 ```
 REACT_APP_REVENUECAT_IOS_KEY=appl_xxxxxxxxxxxxxxxxxxxxxxxxxx
 REACT_APP_REVENUECAT_ANDROID_KEY=goog_xxxxxxxxxxxxxxxxxxxxxxxxxx
 ```
+(Both optional — the test key is embedded as a fallback for early sandbox testing.)
 
 ### `backend/.env`
 ```
-REVENUECAT_WEBHOOK_SECRET=whsec_xxxxxxxxxxxxxxxxxxxxxxxxxx   # optional today; wire the verifier once you set it
+REVENUECAT_WEBHOOK_SECRET=whsec_xxxxxxxxxxxxxxxxxxxxxxxxxx   # add once webhook is configured
 ```
-
-The current backend accepts the RevenueCat webhook without signature checking
-so testing can happen day-1. Once you paste the secret, add HMAC verification
-to `POST /api/premium/webhook` in `backend/server.py` (~L750).
 
 ---
 
-## 3. Building the native apps
-
-The container already contains:
-- `frontend/capacitor.config.json`
-- `frontend/src/lib/purchases.js` — RevenueCat wrapper
-- `frontend/src/contexts/PremiumContext.jsx` — entitlement state
-- `frontend/src/components/Paywall.jsx` — paywall UI
-
-On your local Mac (iOS) or PC (Android), from `/app/frontend`:
+## 6. Native builds (from your Mac / PC — not the Emergent container)
 
 ```bash
-# Build the web bundle Capacitor will wrap
+cd frontend
 yarn build
 
-# Add the native platform folders (one-time)
-npx cap add ios      # macOS + Xcode required
-npx cap add android  # Android Studio required
+# One-time
+npx cap add ios       # macOS + Xcode required
+npx cap add android   # Android Studio required
 
-# Sync the web build into the native projects (run this after every yarn build)
+# Every time you change web code
 npx cap sync
 
-# Open in the native IDE
+# Open in native IDE for signing + submission
 npx cap open ios       # Xcode
 npx cap open android   # Android Studio
 ```
 
-Then in Xcode, set the signing team and provisioning profile. In Android
-Studio, sign the Play release bundle with your upload key. Both stores
-require submission through their respective consoles.
+Signing:
+- **iOS**: In Xcode, set the signing team; product IDs from step 3 must be
+  approved before TestFlight can render the paywall.
+- **Android**: Upload the signed release bundle to an internal test track.
 
 ---
 
-## 4. What the code does out of the box
+## 7. Runtime behavior
 
-- **On web:** `isPurchasesAvailable()` returns `false`. The Paywall shows an
-  amber "Kite Premium is purchased through the App Store or Google Play"
-  banner. Users on web are never blocked from playing (they hit the same
-  free-round cap and can either wait or open the mobile app to subscribe).
-- **On iOS/Android:** The Paywall shows localized pricing pulled from
-  RevenueCat's `Offerings`. Purchase, cancel, and restore paths all bubble
-  through `PremiumContext` → `/api/premium/sync` → server DB.
-- **Server entitlement:** `/api/questions` returns HTTP 402 with a structured
-  `detail` object once a free user has played `FREE_ROUNDS_PER_DAY` (3)
-  rounds today. Premium users bypass this entirely. The client shows a soft
-  wall UI, never a hard error toast.
-- **Restore purchases:** always available on native, disabled with tooltip on
-  web. Required for App Store approval per §3.1.1.
-- **Loading states:** `usePremium().purchasing` / `.restoring` drive spinners
-  on the Paywall buttons. `usePremium().loading` is true while the initial
-  entitlement bootstrap runs on app open.
+| Platform | Paywall entry | Customer Center | Purchase flow |
+|---|---|---|---|
+| Web (browser) | Custom `<Dialog>` fallback with "unavailable on web" banner | Not available; managed via native app | Not available |
+| iOS / Android (Capacitor) | `RevenueCatUI.presentPaywall({requiredEntitlementIdentifier:"Kite Pro"})` — RevenueCat native template with localized prices | `RevenueCatUI.presentCustomerCenter()` — opens on Sparkle-tap when user is already premium | Native App Store / Play sheet |
+
+Entitlement changes flow through:
+1. RevenueCat SDK returns the updated `customerInfo`.
+2. Client posts to `POST /api/premium/sync` with the entitlement snapshot.
+3. Server updates `users.is_premium` + owned items + returns fresh `/api/premium/status`.
+4. Server enforces `/api/questions` free-tier gate independently — client trust is not required.
 
 ---
 
-## 5. Testing steps
+## 8. Testing steps
 
-### Testing on the web preview (works today, no store accounts needed)
-
-1. Play 3 rounds as a fresh user.
-2. On the 4th `/api/questions` call, backend returns 402. UI shows the
-   free-tier gate with "Unlock Kite Premium" CTA.
-3. Click "Unlock Kite Premium" → Paywall opens with the "web notice" banner.
-4. From backend, simulate the successful purchase:
+### Web sandbox (today, no store accounts needed)
+1. Register a new user, play 3 rounds via `/play`.
+2. 4th round → soft free-tier gate with "Unlock Kite Pro" CTA.
+3. Simulate a purchase server-side:
    ```bash
    curl -X POST http://localhost:8001/api/premium/sync \
      -b /tmp/cookies.txt -H 'Content-Type: application/json' \
-     -d '{"entitlement_active":true,"product_id":"kite_premium_monthly","source":"revenuecat_ios"}'
+     -d '{"entitlement_active":true,"product_id":"yearly","source":"revenuecat_ios"}'
    ```
-5. Reload the app — user should be premium, gate cleared, unlimited rounds,
-   all items unlocked in Shop.
+4. Reload — unlimited rounds, all items owned, Sparkle icon turns emerald.
 
-### Testing on iOS (sandbox)
-
+### iOS sandbox (after Apple setup)
 1. Add a Sandbox tester in App Store Connect → Users and Access → Sandbox.
-2. On the test iPhone: Settings → App Store → sign out of the production
-   Apple ID (Sandbox testers sign in *from the app itself* the first time a
-   purchase is attempted).
-3. `npx cap run ios` from a Mac, or install a TestFlight build.
-4. Play 3 free rounds → free-tier gate appears.
-5. Tap "Unlock Kite Premium" → App Store sandbox sheet appears with monthly
-   and yearly prices.
-6. Complete the purchase (sandbox is free) → premium unlocks immediately,
-   gate clears.
-7. Kill the app, reopen → premium persists (entitlement pulled from
-   RevenueCat on init).
-8. On a fresh install/device, log into the same Kite account → tap
-   "Restore purchases" → premium restores.
-9. Cancel the sandbox subscription in Settings → Apple ID → Subscriptions →
-   after the accelerated sandbox period, `/api/premium/webhook` receives the
-   expiry event and the server flips the user off premium at next sync.
+2. `npx cap run ios` — install on the device with the tester's Apple ID signed
+   in via **Settings → App Store → Sandbox Account**.
+3. Play 3 rounds → gate → tap **Unlock Kite Pro** → RevenueCat's native
+   paywall opens showing the products you configured (lifetime / yearly /
+   monthly with localized prices).
+4. Complete a sandbox purchase → paywall closes → `/api/premium/sync` fires →
+   entitlement flips → Sparkle icon turns emerald.
+5. Kill + reopen → still premium (loaded from RevenueCat + server DB).
+6. Tap Sparkle icon → Customer Center opens (manage / cancel / restore).
+7. Cancel in Customer Center → webhook fires → server flips off premium at
+   next `/api/premium/sync`.
 
-### Testing on Android (Play Billing sandbox)
-
+### Android sandbox (after Google setup)
 1. Add the test account (email) in Play Console → Setup → License testing.
-2. Upload the signed release bundle to an internal test track.
-3. Install via the internal-testing URL on the test device.
-4. Same flow as iOS: play 3 rounds → paywall → purchase (Play sandbox is
-   free for license testers) → premium unlocks → verify persistence and
-   restore across reinstalls.
-
-### Verifying entitlement server-side
-
-Any authenticated request:
-```bash
-curl -b /tmp/cookies.txt https://<backend>/api/premium/status
-```
-Expected: `{ is_premium: true, rounds_remaining_today: null, ... }`
+2. Upload the signed release bundle to Internal testing.
+3. Install via the internal link, sign in with the tester account.
+4. Same flow as iOS. RevenueCat native paywall + Customer Center both render.
 
 ---
 
-## 6. Files added / changed in this iteration
+## 9. Files touched this iteration
 
 **Backend**
-- `backend/server.py` — added `User.is_premium` fields, free-tier gate at `/api/questions`, `GET /api/premium/status`, `POST /api/premium/sync`, `POST /api/premium/webhook` (stub).
+- `backend/server.py` — Entitlement ID → `"Kite Pro"` (constant `PREMIUM_ENTITLEMENT_ID`).
+- `backend/tests/test_kite_trivia.py` — updated the expected entitlement_id assertion.
 
 **Frontend**
-- `frontend/capacitor.config.json` — new
-- `frontend/package.json` — added `@capacitor/core`, `@capacitor/cli`, `@capacitor/ios`, `@capacitor/android`, `@revenuecat/purchases-capacitor`
-- `frontend/src/lib/purchases.js` — new. RevenueCat SDK wrapper with web-safe fallback.
-- `frontend/src/contexts/PremiumContext.jsx` — new. App-wide entitlement state.
-- `frontend/src/components/Paywall.jsx` — new. Paywall dialog.
-- `frontend/src/App.js` — mounted `<PremiumProvider>` and `<PaywallHost />`.
-- `frontend/src/pages/Play.jsx` — handles 402 free-tier response with soft wall.
-- `frontend/src/pages/Dashboard.jsx` — Premium sparkle icon in top nav (shows remaining free rounds on hover, opens Paywall on tap).
+- `frontend/package.json` — added `@revenuecat/purchases-capacitor-ui@13.2.1`.
+- `frontend/src/lib/purchases.js` — new product IDs (`lifetime` / `yearly` / `monthly`), test API key fallback, `presentPaywall()`, `presentCustomerCenter()`, lifetime package in `getOfferings()`.
+- `frontend/src/contexts/PremiumContext.jsx` — `presentNativePaywall`, `openCustomerCenter`, entitlement default → `"Kite Pro"`.
+- `frontend/src/components/Paywall.jsx` — 3-plan picker (yearly / lifetime / monthly), copy → `Kite Pro`.
+- `frontend/src/pages/Dashboard.jsx` — Sparkle tap opens Customer Center when premium, native paywall otherwise.
+- `frontend/src/pages/Play.jsx` — free-tier CTA calls `presentNativePaywall()`, copy → `Kite Pro`.
 
-Nothing else was changed. Existing gameplay, Stripe web shop, question DB,
-XP curve, sky themes, and audio are all untouched.
+Untouched: gameplay, XP curve, question DB, Stripe web shop, audio, sky themes, dashboard/leaderboard/profile core.

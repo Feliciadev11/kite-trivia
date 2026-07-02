@@ -19,19 +19,27 @@ import { logError } from "./logger";
 // -------------------- Config (edit here) --------------------
 // RevenueCat public SDK keys (safe to ship in the client). Grab them from
 // RevenueCat → Project → API keys.
-export const REVENUECAT_API_KEY_IOS = process.env.REACT_APP_REVENUECAT_IOS_KEY || "";
-export const REVENUECAT_API_KEY_ANDROID = process.env.REACT_APP_REVENUECAT_ANDROID_KEY || "";
+//
+// Test key (from user prompt) — falls back to this if env vars aren't set so
+// you can start testing immediately. Replace with per-platform keys once you
+// create the iOS + Android apps in RevenueCat.
+const REVENUECAT_TEST_KEY = "test_zbkylBVKIMySdYkgspQwisDwjTN";
+export const REVENUECAT_API_KEY_IOS =
+  process.env.REACT_APP_REVENUECAT_IOS_KEY || REVENUECAT_TEST_KEY;
+export const REVENUECAT_API_KEY_ANDROID =
+  process.env.REACT_APP_REVENUECAT_ANDROID_KEY || REVENUECAT_TEST_KEY;
 
-// The RevenueCat "entitlement" identifier. Create it in RevenueCat with this
-// exact name and attach both product IDs below to it.
-export const KITE_PREMIUM_ENTITLEMENT_ID = "kite_premium";
+// The RevenueCat "entitlement" identifier — create it in RevenueCat with this
+// exact name and attach all three products below to it.
+export const KITE_PREMIUM_ENTITLEMENT_ID = "Kite Pro";
 
 // Store product identifiers. Create these in App Store Connect (iOS) and
-// Google Play Console (Android). Both stores can share the same ID string;
+// Google Play Console (Android). Both stores share the same ID string;
 // RevenueCat maps them into a single entitlement.
 export const KITE_PREMIUM_PRODUCT_IDS = {
-  monthly: "kite_premium_monthly",
-  yearly: "kite_premium_yearly",
+  lifetime: "lifetime",
+  yearly: "yearly",
+  monthly: "monthly",
 };
 
 // -------------------- Runtime detection --------------------
@@ -85,9 +93,9 @@ export async function initPurchases(appUserId) {
 
 // -------------------- Fetch offerings --------------------
 /**
- * Returns the "current" offering's monthly + yearly packages so the paywall UI
- * can show localized prices. Returns { ok: true, packages: {monthly, yearly} }
- * or { ok: false, reason }.
+ * Returns the "current" offering's monthly / yearly / lifetime packages so
+ * the paywall UI can show localized prices. Returns
+ * { ok: true, packages: {monthly, yearly, lifetime} } or { ok: false, reason }.
  */
 export async function getOfferings() {
   if (!IS_NATIVE) return { ok: false, reason: "unavailable" };
@@ -99,11 +107,12 @@ export async function getOfferings() {
     if (!current) return { ok: false, reason: "no_current_offering" };
     const packages = {};
     for (const p of current.availablePackages || []) {
-      // RevenueCat auto-classifies MONTHLY / ANNUAL packages via packageType.
+      // RevenueCat classifies packages via packageType.
       if (p.packageType === "MONTHLY") packages.monthly = p;
       else if (p.packageType === "ANNUAL") packages.yearly = p;
+      else if (p.packageType === "LIFETIME") packages.lifetime = p;
     }
-    return { ok: true, packages, offeringIdentifier: current.identifier };
+    return { ok: true, packages, offeringIdentifier: current.identifier, offering: current };
   } catch (e) {
     logError("getOfferings failed", e);
     return { ok: false, reason: "fetch_failed", error: String(e?.message || e) };
@@ -182,5 +191,81 @@ export async function getCustomerInfo() {
   } catch (e) {
     logError("getCustomerInfo failed", e);
     return { ok: false, reason: "query_failed", error: String(e?.message || e) };
+  }
+}
+
+// -------------------- RevenueCat UI (native paywall + customer center) --------------------
+// Uses @revenuecat/purchases-capacitor-ui which requires the core SDK to be
+// configured first (initPurchases). Both APIs return a structured result and
+// swallow the "SDK unavailable" case for the web build.
+
+let _uiModule = null;
+async function _lazyImportUI() {
+  if (_uiModule) return _uiModule;
+  try {
+    _uiModule = await import("@revenuecat/purchases-capacitor-ui");
+    return _uiModule;
+  } catch (e) {
+    logError("Failed to import @revenuecat/purchases-capacitor-ui", e);
+    return null;
+  }
+}
+
+/**
+ * Presents the RevenueCat native Paywall UI (managed template configured in
+ * the RevenueCat dashboard). Resolves after the user closes or purchases.
+ *
+ * @returns { ok, purchased, entitlementActive, canceled?, reason?, error? }
+ */
+export async function presentPaywall({ requiredEntitlementIdentifier } = {}) {
+  if (!IS_NATIVE) return { ok: false, reason: "unavailable" };
+  const ui = await _lazyImportUI();
+  if (!ui) return { ok: false, reason: "sdk_missing" };
+  try {
+    // RevenueCatUI.presentPaywall returns one of:
+    //   NOT_PRESENTED / ERROR / CANCELLED / PURCHASED / RESTORED
+    const opts = requiredEntitlementIdentifier
+      ? { requiredEntitlementIdentifier }
+      : {};
+    const result = await ui.RevenueCatUI.presentPaywall(opts);
+    const outcome = result?.result || result;
+    const info = await getCustomerInfo();
+    return {
+      ok: true,
+      outcome, // "NOT_PRESENTED" | "ERROR" | "CANCELLED" | "PURCHASED" | "RESTORED"
+      purchased: outcome === "PURCHASED" || outcome === "RESTORED",
+      canceled: outcome === "CANCELLED",
+      entitlementActive: !!info.entitlementActive,
+      productId: info.productId || null,
+      expiresAt: info.expiresAt || null,
+    };
+  } catch (e) {
+    logError("presentPaywall failed", e);
+    return { ok: false, reason: "paywall_failed", error: String(e?.message || e) };
+  }
+}
+
+/**
+ * Presents RevenueCat's Customer Center — the built-in "Manage your
+ * subscription" screen that App Store reviewers expect. Handles restore,
+ * refund requests, plan changes, and cancellation help without any custom UI.
+ */
+export async function presentCustomerCenter() {
+  if (!IS_NATIVE) return { ok: false, reason: "unavailable" };
+  const ui = await _lazyImportUI();
+  if (!ui) return { ok: false, reason: "sdk_missing" };
+  try {
+    await ui.RevenueCatUI.presentCustomerCenter();
+    // After dismiss, refresh entitlement state for the app.
+    const info = await getCustomerInfo();
+    return {
+      ok: true,
+      entitlementActive: !!info.entitlementActive,
+      productId: info.productId || null,
+      expiresAt: info.expiresAt || null,
+    };
+  } catch (e) {
+    logError("presentCustomerCenter failed", e);
+    return { ok: false, reason: "customer_center_failed", error: String(e?.message || e) };
   }
 }
