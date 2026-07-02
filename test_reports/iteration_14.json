@@ -1,0 +1,36 @@
+{
+  "summary": "Frontend-only testing of new PUBLIC legal pages (/privacy and /terms) for Kite. All 10 acceptance criteria from the review request pass. Both routes are publicly accessible (no /login redirect), display correct titles, contain every required content section (RevenueCat / Apple App Store / Google Play / children's-privacy / contact email for Privacy; Monthly / Yearly / Lifetime / App Store / Google Play / Limitation of liability / Restore purchases / Cancelling a subscription / Acceptable use / Intellectual property for Terms), use the Kite sky-gradient + glass-card branding, expose a working 'Back to Kite' link (data-testid=legal-home-link) that returns to /, and contain zero 'Kite Pro' text. Landing footer exposes footer-privacy-link and footer-terms-link data-testids and both navigate correctly. No regressions on /, /login, /signup, /forgot-password, /dashboard (protected route still redirects to /login). Skipped backend testing per instructions.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "/privacy and /terms (first visit only)",
+        "issues": [
+          "SkySplash overlay (\"Tap to begin your sky\") is rendered globally and covers the legal pages on the very first visit until dismissed. This is a UX concern for App Store / Google Play reviewers who paste the direct URL — they will see the splash instead of the legal text. Once dismissed, localStorage flag SPLASH_KEY makes it stay hidden. Recommendation (non-blocking): in /app/frontend/src/components/SkySplash.jsx, early-return null when window.location.pathname is '/privacy' or '/terms' so store reviewers see the policy immediately."
+        ]
+      }
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "OPTIONAL/NON-BLOCKING: Skip rendering SkySplash on /privacy and /terms so app-store reviewers land directly on the legal content (see design_issues). Everything else is production-ready."
+  ],
+  "critical_code_review_comments": [
+    "LegalLayout.jsx uses sticky header + glass-card container consistent with Kite branding — good.",
+    "Both pages are correctly declared OUTSIDE of ProtectedRoute in App.js (lines 213-214), so /privacy and /terms are publicly reachable — verified.",
+    "AuthProvider still fires GET /api/auth/me on public pages, producing benign 401s in the console. This is pre-existing behaviour and NOT introduced by this iteration — acceptable, but a small optimisation would be to skip checkAuth on public/legal routes.",
+    "Privacy page CONTACT_EMAIL=privacy@kitetrivia.app and Terms page CONTACT_EMAIL=support@kitetrivia.app — confirm these mailboxes actually exist before shipping to App Store review.",
+    "Landing.jsx footer uses raw <a href> instead of <Link>. Clicks work (verified) but cause a full page reload. Minor — swap to react-router <Link> for a smoother SPA feel.",
+    "LAST_UPDATED='February 17, 2026' hard-coded in both pages — fine, but keep in mind you'll need to bump this manually when policies change."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped per request)", "frontend": "100%"},
+  "test_credentials": "N/A — public routes tested without login.",
+  "seed_data_creation": "None.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Legal pages (/privacy, /terms) verified public + content complete + branded + no regressions. Only outstanding note is the pre-existing SkySplash overlay that covers legal pages on first visit — reported as a non-blocking UX suggestion for App Store review. Backend was not tested this iteration.",
+  "rca of the issue": "N/A — no functional issues found. SkySplash overlay note: SkySplash is mounted at the App root inside <BrowserRouter> and renders unconditionally until the localStorage flag SPLASH_KEY is 'true'. On a fresh browser session (which is what App Store reviewers use), it covers /privacy and /terms. Reproduction: open incognito, go directly to https://kite-trivia-quest.preview.emergentagent.com/privacy. Mitigation: return null from SkySplash if window.location.pathname is '/privacy' or '/terms'."
+}

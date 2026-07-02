@@ -10,6 +10,8 @@ import { LandingPage } from "./pages/Landing";
 import { LoginPage } from "./pages/Login";
 import { SignupPage } from "./pages/Signup";
 import { ForgotPasswordPage } from "./pages/ForgotPassword";
+import { PrivacyPage } from "./pages/Privacy";
+import { TermsPage } from "./pages/Terms";
 import { DashboardPage } from "./pages/Dashboard";
 import { PlayPage } from "./pages/Play";
 import { ShopPage } from "./pages/Shop";
@@ -208,6 +210,8 @@ const AppRouter = () => {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/signup" element={<SignupPage />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/privacy" element={<PrivacyPage />} />
+      <Route path="/terms" element={<TermsPage />} />
       <Route path="/dashboard" element={
         <ProtectedRoute>
           <DashboardPage />

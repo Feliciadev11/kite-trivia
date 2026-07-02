@@ -182,7 +182,12 @@ export default function LandingPage() {
 
       {/* Footer */}
       <div className="absolute bottom-4 left-0 right-0 text-center text-sky-500 text-sm">
-        Start with easy 5th grade questions and level up!
+        <div>Start with easy 5th grade questions and level up!</div>
+        <div className="mt-1 text-xs text-sky-400">
+          <a href="/privacy" className="hover:text-sky-700 mx-2" data-testid="footer-privacy-link">Privacy</a>
+          <span>·</span>
+          <a href="/terms" className="hover:text-sky-700 mx-2" data-testid="footer-terms-link">Terms</a>
+        </div>
       </div>
     </div>
   );
