@@ -48,6 +48,19 @@ Build a trivia app called Kite with:
 | Shop / Stripe Checkout | Working (Apple Pay, Google Pay, Visa, MC) |
 
 ## What's Been Implemented
+- 2026-02-17 — **RevenueCat Integration — Kite Pro (Iteration 12)**:
+  - **Clarification given to user**: Kite is a Capacitor app (not React Native), so used `@revenuecat/purchases-capacitor` + `@revenuecat/purchases-capacitor-ui` (same feature set as `react-native-purchases`, works with our stack).
+  - Entitlement identifier: **`Kite Pro`** (backend + frontend + tests).
+  - Product IDs: **`lifetime`**, **`yearly`**, **`monthly`** (matches user prompt exactly).
+  - Test API key `test_zbkylBVKIMySdYkgspQwisDwjTN` baked as fallback in `src/lib/purchases.js`.
+  - New helpers in `src/lib/purchases.js`: `presentPaywall({ requiredEntitlementIdentifier })` and `presentCustomerCenter()` — both no-op on web with `{ok:false, reason:'unavailable'}`.
+  - `PremiumContext`: `presentNativePaywall` (native RC UI on device, custom Dialog fallback on web) and `openCustomerCenter` actions.
+  - Dashboard Sparkles nav: opens Customer Center when premium, presents RC paywall otherwise.
+  - Paywall dialog updated with 3-plan picker (yearly / lifetime / monthly), all copy reads "Kite Pro".
+  - **Verified (iter 12)**: backend 42/42 PASS, frontend 100% PASS. Zero import errors on web — dynamic imports of RC SDKs correctly short-circuited by `IS_NATIVE` guard.
+  - **Docs**: `README-mobile.md` fully rewritten with the new IDs and the Paywall template + Customer Center setup steps.
+
+
 - 2026-02-17 — **Mobile Paywall (Capacitor + RevenueCat + Free Tier) — Iteration 11**:
   - Free tier: 3 rounds/day (`FREE_ROUNDS_PER_DAY=3`); premium bypasses. UTC-midnight rollover.
   - Premium model: monthly + yearly auto-renewing subscriptions. Product IDs (placeholders): `kite_premium_monthly`, `kite_premium_yearly`. Entitlement id: `kite_premium`.
