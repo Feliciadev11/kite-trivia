@@ -48,6 +48,13 @@ Build a trivia app called Kite with:
 | Shop / Stripe Checkout | Working (Apple Pay, Google Pay, Visa, MC) |
 
 ## What's Been Implemented
+- 2026-02-17 — **Security-only iter 16: Bandit B102 + B105 in dev/test scripts**:
+  - Confirmed both flagged files (`scripts/generate_questions.py`, `backend_test.py`) are NOT excluded from deployment (no Dockerfile, no .dockerignore, no build filter — Emergent ships the working tree as-is). Neither is imported by `server.py` at runtime, but they are in the shipped bundle.
+  - **Fix 1 (B102 exec-used)** in `scripts/generate_questions.py::_load_existing` — replaced `exec(questions_path.read_text(), spec)` with `importlib.util.spec_from_file_location(...)` + `spec.loader.exec_module(module)` (standard safe module loader; not flagged by Bandit).
+  - **Fix 2 (B105 hardcoded-password)** in `backend_test.py` — replaced literal `test_password = "TestPass123!"` with `os.environ.get("KITE_TEST_PASSWORD", "Tp-" + secrets.token_urlsafe(16))`. Per-run random test credential.
+  - **Verified (iter 16)**: backend 42/42 pytest PASS. Both files import cleanly. Grep confirms both flagged patterns are gone.
+
+
 - 2026-02-17 — **Bug fix: questions failing to load after login (Iteration 15)**:
   - **Root cause**: React 18 StrictMode double-invoked the mount `useEffect` in `Play.jsx`, causing GET `/api/questions` to fire twice per Play visit. Each call incremented `rounds_played_today` by 1 server-side, so free users hit the 3-per-day cap in ~1.5 visits and the 4th call returned HTTP 402 → soft-wall gate rendered → indistinguishable to the user from "questions failed to load".
   - **Fix**: added `didFetchRef = useRef(false)` in `Play.jsx` and a mount guard around the `fetchQuestions()` call — guarantees the fetch fires exactly once per mount in both dev (StrictMode) and prod builds.
