@@ -48,6 +48,13 @@ Build a trivia app called Kite with:
 | Shop / Stripe Checkout | Working (Apple Pay, Google Pay, Visa, MC) |
 
 ## What's Been Implemented
+- 2026-02-17 — **Bug fix: questions failing to load after login (Iteration 15)**:
+  - **Root cause**: React 18 StrictMode double-invoked the mount `useEffect` in `Play.jsx`, causing GET `/api/questions` to fire twice per Play visit. Each call incremented `rounds_played_today` by 1 server-side, so free users hit the 3-per-day cap in ~1.5 visits and the 4th call returned HTTP 402 → soft-wall gate rendered → indistinguishable to the user from "questions failed to load".
+  - **Fix**: added `didFetchRef = useRef(false)` in `Play.jsx` and a mount guard around the `fetchQuestions()` call — guarantees the fetch fires exactly once per mount in both dev (StrictMode) and prod builds.
+  - Scope: `Play.jsx` only. Backend, RevenueCat integration, paywall logic, progression system, and legal pages **untouched**.
+  - **Verified (testing_agent iter 15)**: backend 42/42 PASS + 3 harmless skips; frontend 100% PASS; single GET `/api/questions` per Play mount confirmed; a free user can now visit /play three full times before the correct free-tier gate appears.
+
+
 - 2026-02-17 — **Public Legal Pages (Iteration 14)**:
   - `/privacy` — Privacy Policy covering Apple App Store + Google Play + RevenueCat, gameplay data, analytics, purchases, children's privacy, security, data retention, App Store App Privacy label + Play Data Safety disclosures.
   - `/terms` — Terms of Service covering monthly/yearly/lifetime subs, Apple/Google cancellation flows, refunds, restore purchases, acceptable use, IP, liability limitation, indemnity, governing law, third-party terms links.
