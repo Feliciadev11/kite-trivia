@@ -1,7 +1,7 @@
 import { LegalLayout } from "../components/LegalLayout";
 
 const LAST_UPDATED = "February 17, 2026";
-const CONTACT_EMAIL = "support@kitetrivia.app";
+const CONTACT_EMAIL = "kitetriviaapp@gmail.com";
 
 /**
  * Public route: /terms
