@@ -1,0 +1,29 @@
+{
+  "summary": "Bug-fix verification (iter 15) — StrictMode double-fetch of /api/questions on /play mount. Verified via Playwright network interception on a fresh signup that EACH /play page mount fires exactly ONE GET /api/questions?limit=10 (previously fired 2 back-to-back). Ran 4 sequential visits: visits 1-3 rendered the question card (question-text visible, no gate), visit 4 correctly rendered data-testid='free-tier-gate' with the copy 'You've played 3 rounds today. Unlock the full experience for unlimited flights.' and the network showed exactly one 402 for that mount. Backend pytest suite: 42 passed, 3 skipped (unchanged from prior baseline; skipped tests are Stripe/paid-purchase paths intentionally guarded).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_kite_trivia.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Play.jsx mount guard (didFetchRef useRef) correctly placed BEFORE fetchQuestions() call in useEffect and set immediately to true — this pattern is idiomatic and safe for React 18 StrictMode double-invocation.",
+    "The ref-guard approach avoids adding an AbortController-based fix (which would also work). Ref-guard is simpler and matches the intent: 'exactly one fetch per mount lifecycle'.",
+    "Note (pre-existing, NOT introduced this iter): on a full unmount + remount (e.g., user navigates dashboard → /play → dashboard → /play), the ref is naturally reset because the component remounts — verified: visit 2, 3, 4 each produced their own single request. Good.",
+    "Pre-existing benign 401 errors from GET /api/auth/me are still logged in the console on unauthenticated public routes. Unrelated to this fix; noted in previous iterations. Consider guarding checkAuth with a route check if console cleanliness is desired.",
+    "Play.jsx is 405 lines — approaching the size where splitting question-card and result-screen sub-components would improve readability, but not urgent."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (42/42 passed, 3 skipped)", "frontend": "100%"},
+  "test_credentials": "Fresh ephemeral users registered per test run: TEST_kite_ff2_<ts>@example.com / DreamySky123!",
+  "seed_data_creation": "None. Tests self-register.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Bug fix for React StrictMode double-fetch of /api/questions is verified end-to-end. On a fresh free-tier user, /play mount now fires exactly 1 GET /api/questions, and after 3 successful mounts the 4th correctly shows data-testid='free-tier-gate' via 402. Backend unchanged, 42/42 pytest still pass. No new console errors introduced (only pre-existing benign 401s from /api/auth/me on public pages).",
+  "rca of the issue": "PRIMARY BUG (before fix): React 18 StrictMode double-invokes mount useEffect in development builds, causing GET /api/questions to be issued twice on every Play page mount. The backend increments rounds_played_today on every /api/questions call, so free-tier users burnt through the 3-rounds/day cap in ~1.5 real visits and were incorrectly gated. FIX: didFetchRef = useRef(false); if (didFetchRef.current) return; didFetchRef.current = true; before fetchQuestions() in the mount effect. VERIFICATION: Playwright network listener counted exactly 1 request on each of 4 sequential Play mounts on a fresh account; visits 1-3 rendered questions, visit 4 rendered free-tier-gate."
+}

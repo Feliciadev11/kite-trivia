@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import axios from "axios";
@@ -27,6 +27,7 @@ export default function PlayPage() {
   const [score, setScore] = useState({ correct: 0, total: 0 });
   const [milestones, setMilestones] = useState(null);
   const [freeGate, setFreeGate] = useState(null); // { rounds_played_today, free_rounds_per_day }
+  const didFetchRef = useRef(false);
 
   const fetchQuestions = useCallback(async () => {
     try {
@@ -56,6 +57,12 @@ export default function PlayPage() {
   }, [refreshServerStatus]);
 
   useEffect(() => {
+    // React 18 StrictMode double-invokes mount effects in dev, which would
+    // otherwise cause /api/questions to be hit twice per mount — each call
+    // consumes a free-tier daily round on the server. The ref guarantees the
+    // fetch fires exactly once per Play page mount, in dev and prod alike.
+    if (didFetchRef.current) return;
+    didFetchRef.current = true;
     fetchQuestions();
   }, [fetchQuestions]);
 
