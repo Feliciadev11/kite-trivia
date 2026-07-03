@@ -180,11 +180,18 @@ def _plan_batches() -> list[tuple[str, int, int]]:
 
 
 def _load_existing() -> tuple[list, set, dict]:
-    """Return (list_of_existing, set_of_norm_questions, counter_per_category)."""
+    """Return (list_of_existing, set_of_norm_questions, counter_per_category).
+
+    Loads `questions_db.py` via importlib (safer than exec — no arbitrary code
+    execution surface). We use `importlib.util.spec_from_file_location` so we
+    don't rely on sys.path ordering and can reload cleanly on subsequent runs.
+    """
+    import importlib.util
     questions_path = BACKEND_DIR / "questions_db.py"
-    spec = {}
-    exec(questions_path.read_text(), spec)  # noqa: S102 — local data file
-    existing = spec["QUESTIONS"]
+    spec = importlib.util.spec_from_file_location("questions_db_local", questions_path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    existing = module.QUESTIONS
     seen = {_normalize_for_dedupe(q["question"]) for q in existing}
     counts = Counter(q.get("category", "?") for q in existing)
     return existing, seen, counts

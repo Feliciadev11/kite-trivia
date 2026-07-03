@@ -1,3 +1,5 @@
+import os
+import secrets
 import requests
 import sys
 from datetime import datetime
@@ -208,7 +210,12 @@ def main():
     tester = KiteTriviaAPITester()
     test_timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     test_email = f"test_user_{test_timestamp}@test.com"
-    test_password = "TestPass123!"
+    # Generate a per-run test credential rather than hardcoding one — silences
+    # static scanners (Bandit B105) and ensures repeat runs don't collide.
+    test_password = os.environ.get(
+        "KITE_TEST_PASSWORD",
+        "Tp-" + secrets.token_urlsafe(16),  # noqa: S311 — non-crypto token is fine for tests
+    )
     test_name = f"Test User {test_timestamp}"
 
     # Test 1: Health Check
