@@ -1,0 +1,51 @@
+{
+  "summary": "Iter 17 regression verification — NO REGRESSION FOUND. Backend + frontend fully verified end-to-end against the live preview URL. /api/questions returns HTTP 200 with 10 valid questions for a freshly-registered user; iter-15 mount-guard is holding (exactly 1 GET /api/questions per Play mount); iter-16 security-only edits (generate_questions.py + backend_test.py) have not affected the /api/questions code path (neither is imported by server.py). Free-tier gate fires correctly on the 4th round attempt: 402 from backend + [data-testid=\"free-tier-gate\"] renders with 'You've flown far today' copy — NOT a 'Failed to load' toast. 42/42 pytest suite still PASS with 3 legitimate skips. The user's report of 'questions no longer load' is NOT reproducible in the current preview build — most likely a stale-state / cached-bundle artefact on their end, or their account already exhausted the 3-round daily free-tier cap (which is correct behaviour, not a bug).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_kite_trivia.py",
+    "/app/backend/tests/test_iter17_regression.py",
+    "/app/test_reports/pytest/iteration_17_results.xml"
+  ],
+  "action_items": [
+    "None required. Please respond to the user that no regression exists in the current preview build. Suggest they hard-refresh (Cmd/Ctrl-Shift-R) and confirm their account has not already played 3 rounds today (rounds_played_today>=3 correctly serves the free-tier gate, which is expected)."
+  ],
+  "critical_code_review_comments": [
+    "Play.jsx L30/L59-67 mount-guard (didFetchRef) is correctly implemented and continues to defeat StrictMode double-invoke — verified exactly 1 GET /api/questions per Play mount across 4 mounts in this run.",
+    "Play.jsx L228 (play-again-btn) correctly bypasses the mount-guard by calling fetchQuestions() directly rather than remounting — verified via network capture: each Play Again click issues exactly 1 new GET /api/questions.",
+    "server.py L560-573 free-tier gate raises HTTPException(402, detail={code, message, rounds_played_today, free_rounds_per_day}) — the structured detail is consumed correctly by Play.jsx L42-49 and mapped to the free-tier-gate UI state; the branch NEVER triggers the 'Failed to load' toast, which is exactly the design intent.",
+    "Pre-existing (not touched this iter): server.py still uses deprecated @app.on_event('startup'/'shutdown'). FastAPI lifespan handlers would be cleaner but non-blocking.",
+    "Optional enhancement: consider adding a top-level error-boundary test-id (e.g., data-testid=\"questions-fetch-error\") for any future non-402 fetch failures, so the failure mode is queryable from tests instead of relying on the toast library markup."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter17_regression.py (new — 3 tests, all passing)"
+  ],
+  "success_rate": {"backend": "100% (42/42 kite-trivia suite + 3/3 iter17 regression suite)", "frontend": "100% (all primary + secondary flows verified in live browser)"},
+  "test_credentials": "Per-run ephemeral users: TEST_iter17ui_<hex>@example.com / DreamySky123!  (created via /signup UI). Backend suite uses TEST_iter17_<hex> via /api/auth/register.",
+  "seed_data_creation": "None. Two ephemeral test users created: (1) via UI at /signup for browser flow; (2) via API for pytest regression. Both isolated per-run with random emails.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iter 17 is a regression-check-only iteration; the main agent applied NO code changes. Verified end-to-end that the reported 'questions no longer load' issue is NOT reproducible on the current preview build. Complete flow: register -> /play (200 + 10 Q) -> answer all 10 -> game-over -> Play Again -> repeat 3x -> 4th attempt returns 402 + renders free-tier-gate. The one behaviour that could look like a bug to a user: if they already played 3 rounds today, /play IMMEDIATELY shows the gate (correct). Backend pytest baseline is 42 passed + 3 skipped (Stripe-dependent skips). New file /app/backend/tests/test_iter17_regression.py is a lightweight 3-test regression fixture reusable in future iterations.",
+  "verification_evidence": {
+    "api_health": 200,
+    "kite_trivia_pytest": "42 passed, 3 skipped",
+    "iter17_regression_pytest": "3 passed",
+    "fresh_user_questions_status": 200,
+    "fresh_user_questions_count": 10,
+    "mount_guard_calls_per_play_mount": 1,
+    "play_again_new_fetch_calls": 1,
+    "fourth_round_status": 402,
+    "free_tier_gate_testid_visible": true,
+    "failed_to_load_toast_shown": false,
+    "questions_answer_endpoint_calls_over_3_rounds": 30,
+    "questions_answer_calls_all_200": true
+  },
+  "rca of the issue": "There is no regression. Root-cause hypothesis for the user's report: (a) stale JS bundle in browser cache from a pre-iter-15 build (double-fetch bug is fixed but a cached bundle could still show it), or (b) the account had already exhausted its 3 free rounds for the UTC day and correctly hit the free-tier gate — which may have been misread as 'questions no longer load'. Mitigation: hard refresh (Cmd/Ctrl-Shift-R) and confirm the gate copy ('You've flown far today') vs a 'Failed to load' toast; only the toast would indicate a real failure. Reproduction attempts on the live preview URL show consistent success across 4 mounts + 3 completed rounds + 1 gate trigger."
+}
