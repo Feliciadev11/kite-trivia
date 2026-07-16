@@ -37,7 +37,7 @@ const initialStatus = {
   free_rounds_per_day: 3,
   rounds_played_today: 0,
   rounds_remaining_today: 3,
-  entitlement_id: "Kite Pro",
+  entitlement_id: "Kite Premium",
 };
 
 export function PremiumProvider({ children }) {
@@ -116,7 +116,7 @@ export function PremiumProvider({ children }) {
   }, [user?.user_id, _pushEntitlementToServer, refreshServerStatus]);
 
   // -------- Purchase --------
-  const purchase = useCallback(async (which /* "monthly" | "yearly" */) => {
+  const purchase = useCallback(async (which /* "monthly" */) => {
     if (!servicesAvailable) {
       return { ok: false, reason: "unavailable", message: "The full experience is unlocked on iOS and Android." };
     }
@@ -210,7 +210,7 @@ export function PremiumProvider({ children }) {
     purchasing,
     restoring,
     servicesAvailable,
-    offerings, // { ok, packages: {monthly, yearly, lifetime}, offeringIdentifier }
+    offerings, // { ok, packages: {monthly}, offeringIdentifier }
     paywallOpen,
     // Actions
     refreshServerStatus,

@@ -667,7 +667,7 @@ async def get_questions(
 # =========================================================================
 
 FREE_ROUNDS_PER_DAY = 3
-PREMIUM_ENTITLEMENT_ID = "Kite Pro"  # matches RevenueCat entitlement identifier
+PREMIUM_ENTITLEMENT_ID = "Kite Premium"  # matches RevenueCat entitlement identifier
 
 class PremiumSyncPayload(BaseModel):
     """Sent by the mobile client after RevenueCat state changes.

@@ -724,13 +724,13 @@ def test_premium_sync_grants_unlimited_rounds():
     # Sync premium — mimics what mobile client posts after RevenueCat purchase
     sync = s.post(f"{API}/premium/sync", json={
         "entitlement_active": True,
-        "product_id": "kite_premium_yearly",
+        "product_id": "monthly",
         "source": "revenuecat_ios",
     })
     assert sync.status_code == 200
     data = sync.json()
     assert data["is_premium"] is True
-    assert data["premium_product_id"] == "kite_premium_yearly"
+    assert data["premium_product_id"] == "monthly"
     assert data["rounds_remaining_today"] is None
 
     # Post-premium round should succeed
@@ -758,7 +758,7 @@ def test_premium_status_shape():
         "entitlement_id",
     ]:
         assert key in body, f"missing key {key} in status body: {body}"
-    assert body["entitlement_id"] == "Kite Pro"
+    assert body["entitlement_id"] == "Kite Premium"
     assert body["free_rounds_per_day"] == 3
     assert body["is_premium"] is False
     assert body["rounds_remaining_today"] == 3
@@ -775,7 +775,7 @@ def test_premium_downgrade_via_sync():
         "name": "D",
     })
     # Grant then revoke
-    s.post(f"{API}/premium/sync", json={"entitlement_active": True, "product_id": "kite_premium_monthly"})
+    s.post(f"{API}/premium/sync", json={"entitlement_active": True, "product_id": "monthly"})
     s.post(f"{API}/premium/sync", json={"entitlement_active": False})
 
     status = s.get(f"{API}/premium/status").json()

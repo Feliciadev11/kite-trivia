@@ -25,11 +25,9 @@ export const Paywall = () => {
     is_premium,
   } = usePremium();
 
-  const [selected, setSelected] = useState("yearly");
+  const [selected] = useState("monthly");
 
   const monthly = offerings?.packages?.monthly;
-  const yearly = offerings?.packages?.yearly;
-  const lifetime = offerings?.packages?.lifetime;
 
   const priceLabel = (pkg, fallback) => {
     if (!pkg) return fallback;
@@ -125,35 +123,16 @@ export const Paywall = () => {
               </div>
             )}
 
-            {/* Plan picker */}
+            {/* Monthly plan card (single-plan offering) */}
             {servicesAvailable && (
-              <div className="px-6 pt-5 grid grid-cols-3 gap-2">
-                <PlanCard
-                  active={selected === "yearly"}
-                  title="Yearly"
-                  price={priceLabel(yearly, "—")}
-                  badge="Best value"
-                  sub="Save vs monthly"
-                  disabled={!yearly}
-                  onSelect={() => setSelected("yearly")}
-                  testId="plan-yearly"
-                />
-                <PlanCard
-                  active={selected === "lifetime"}
-                  title="Lifetime"
-                  price={priceLabel(lifetime, "—")}
-                  sub="One-time"
-                  disabled={!lifetime}
-                  onSelect={() => setSelected("lifetime")}
-                  testId="plan-lifetime"
-                />
+              <div className="px-6 pt-5">
                 <PlanCard
                   active={selected === "monthly"}
                   title="Monthly"
                   price={priceLabel(monthly, "—")}
                   sub="Cancel anytime"
                   disabled={!monthly}
-                  onSelect={() => setSelected("monthly")}
+                  onSelect={() => {}}
                   testId="plan-monthly"
                 />
               </div>

@@ -20,25 +20,22 @@ import { logError } from "./logger";
 // RevenueCat public SDK keys (safe to ship in the client). Grab them from
 // RevenueCat → Project → API keys.
 //
-// Test key (from user prompt) — falls back to this if env vars aren't set so
-// you can start testing immediately. Replace with per-platform keys once you
-// create the iOS + Android apps in RevenueCat.
-const REVENUECAT_TEST_KEY = "test_zbkylBVKIMySdYkgspQwisDwjTN";
+// Real iOS production key. Android will fall back to the same string if the
+// Android env override isn't set — replace with your goog_ key when you
+// create the Android app in RevenueCat.
+const REVENUECAT_IOS_DEFAULT_KEY = "appl_FDZleDDwzBzsjRGiwESYlMsMwvo";
 export const REVENUECAT_API_KEY_IOS =
-  process.env.REACT_APP_REVENUECAT_IOS_KEY || REVENUECAT_TEST_KEY;
+  process.env.REACT_APP_REVENUECAT_IOS_KEY || REVENUECAT_IOS_DEFAULT_KEY;
 export const REVENUECAT_API_KEY_ANDROID =
-  process.env.REACT_APP_REVENUECAT_ANDROID_KEY || REVENUECAT_TEST_KEY;
+  process.env.REACT_APP_REVENUECAT_ANDROID_KEY || REVENUECAT_IOS_DEFAULT_KEY;
 
-// The RevenueCat "entitlement" identifier — create it in RevenueCat with this
-// exact name and attach all three products below to it.
-export const KITE_PREMIUM_ENTITLEMENT_ID = "Kite Pro";
+// The RevenueCat "entitlement" identifier — must match the exact identifier
+// configured in your RevenueCat dashboard. Case-sensitive, with a space.
+export const KITE_PREMIUM_ENTITLEMENT_ID = "Kite Premium";
 
 // Store product identifiers. Create these in App Store Connect (iOS) and
-// Google Play Console (Android). Both stores share the same ID string;
-// RevenueCat maps them into a single entitlement.
+// Google Play Console (Android). Currently monthly-only.
 export const KITE_PREMIUM_PRODUCT_IDS = {
-  lifetime: "lifetime",
-  yearly: "yearly",
   monthly: "monthly",
 };
 
@@ -93,9 +90,9 @@ export async function initPurchases(appUserId) {
 
 // -------------------- Fetch offerings --------------------
 /**
- * Returns the "current" offering's monthly / yearly / lifetime packages so
- * the paywall UI can show localized prices. Returns
- * { ok: true, packages: {monthly, yearly, lifetime} } or { ok: false, reason }.
+ * Returns the "current" offering's monthly package so the paywall UI can
+ * show localized prices. Returns
+ * { ok: true, packages: {monthly} } or { ok: false, reason }.
  */
 export async function getOfferings() {
   if (!IS_NATIVE) return { ok: false, reason: "unavailable" };
@@ -107,10 +104,7 @@ export async function getOfferings() {
     if (!current) return { ok: false, reason: "no_current_offering" };
     const packages = {};
     for (const p of current.availablePackages || []) {
-      // RevenueCat classifies packages via packageType.
       if (p.packageType === "MONTHLY") packages.monthly = p;
-      else if (p.packageType === "ANNUAL") packages.yearly = p;
-      else if (p.packageType === "LIFETIME") packages.lifetime = p;
     }
     return { ok: true, packages, offeringIdentifier: current.identifier, offering: current };
   } catch (e) {
