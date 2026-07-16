@@ -12,7 +12,7 @@ accounts exist.
 | Item | Value | Where |
 |---|---|---|
 | RevenueCat entitlement | **`Kite Pro`** | Server + `src/lib/purchases.js` |
-| Bundle / Package | **`com.kitetrivia.app`** | `capacitor.config.json` |
+| Bundle / Package | **`com.feliciakay.kitetrivia`** | `capacitor.config.json` |
 | Product ID — lifetime | **`lifetime`** | `src/lib/purchases.js` |
 | Product ID — yearly | **`yearly`** | `src/lib/purchases.js` |
 | Product ID — monthly | **`monthly`** | `src/lib/purchases.js` |
@@ -58,7 +58,7 @@ accounts exist.
 
 1. Enroll in the Apple Developer Program.
 2. Apps → **New App**:
-   - Bundle ID: `com.kitetrivia.app`
+   - Bundle ID: `com.feliciakay.kitetrivia`
    - Name: `Kite`
 3. Features → **In-App Purchases → +** and create:
    - Product ID: **`lifetime`**  — non-consumable
@@ -74,7 +74,7 @@ accounts exist.
 ## 4. Google Play Console
 
 1. Enroll in the Google Play Console ($25 one-time).
-2. Create the app with package name `com.kitetrivia.app`.
+2. Create the app with package name `com.feliciakay.kitetrivia`.
 3. Monetize → **In-app products → Create**:
    - Product ID: **`lifetime`** (managed / non-consumable)
 4. Monetize → **Subscriptions → Create**:

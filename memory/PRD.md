@@ -39,7 +39,7 @@ Build a trivia app called Kite with:
   - Entitlement identifier renamed `Kite Pro` → **`Kite Premium`** across backend (`server.py` PREMIUM_ENTITLEMENT_ID), `purchases.js` (KITE_PREMIUM_ENTITLEMENT_ID), `PremiumContext.jsx` (initialStatus), and pytest suite.
   - Product model simplified to **monthly only** (dropped `yearly` and `lifetime`). `KITE_PREMIUM_PRODUCT_IDS = { monthly: "monthly" }`; `getOfferings()` only maps MONTHLY packageType; `Paywall.jsx` renders a single plan card.
   - Tests updated (3 assertions) — 45/45 pytest PASS.
-  - Bundle ID (`com.kitetrivia.app`) NOT yet confirmed against Apple Dev Portal / App Store Connect / RevenueCat / Xcode — user will confirm before native build.
+  - Bundle ID (`com.feliciakay.kitetrivia`) — confirmed 2026-02-19 against user's Apple Dev / App Store Connect / RevenueCat account.
 
 - 2026-02-17 — Full-experience customer-facing rename (iter 13)
 - 2026-02-17 — RevenueCat integration wired (iter 12)
@@ -53,7 +53,7 @@ Build a trivia app called Kite with:
 ## Prioritized Backlog
 
 ### P0 (Critical — Before Beta)
-- [ ] Confirm bundle ID `com.kitetrivia.app` matches Apple Dev + App Store Connect + RevenueCat + Xcode
+- [x] Bundle ID confirmed: `com.feliciakay.kitetrivia`
 - [ ] Verify RevenueCat production redeploy in production bundle (bundle hash refresh)
 - [ ] Admin panel for Stripe purchase verification
 

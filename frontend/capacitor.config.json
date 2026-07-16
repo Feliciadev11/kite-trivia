@@ -1,5 +1,5 @@
 {
-  "appId": "com.kitetrivia.app",
+  "appId": "com.feliciakay.kitetrivia",
   "appName": "Kite",
   "webDir": "build",
   "server": { "androidScheme": "https" },
