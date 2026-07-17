@@ -49,6 +49,19 @@ export default function PlayPage() {
         refreshServerStatus?.();
       } else {
         toast.error("Failed to load questions");
+        // Structured logging — ensures WKWebView console shows the real
+        // failure instead of `[error] - {}`. Runs in production too.
+        const info = {
+          where: "Play.fetchQuestions",
+          name: error?.name,
+          message: error?.message,
+          code: error?.code,
+          requestUrl: error?.config?.url,
+          responseStatus: error?.response?.status,
+          responseData: error?.response?.data,
+        };
+        // eslint-disable-next-line no-console
+        console.error("[Play.fetchQuestions]", JSON.stringify(info, null, 2));
         logError("fetchQuestions failed", error);
       }
     } finally {
@@ -102,6 +115,15 @@ export default function PlayPage() {
       }
     } catch (error) {
       toast.error("Failed to submit answer");
+      // eslint-disable-next-line no-console
+      console.error("[Play.handleAnswer]", JSON.stringify({
+        name: error?.name,
+        message: error?.message,
+        code: error?.code,
+        requestUrl: error?.config?.url,
+        responseStatus: error?.response?.status,
+        responseData: error?.response?.data,
+      }, null, 2));
     } finally {
       setSubmitting(false);
     }
