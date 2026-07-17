@@ -226,13 +226,14 @@ async def register(user_data: UserCreate, response: Response):
     }
     await db.user_sessions.insert_one(session_doc)
     
-    # Set cookie
+    # Set cookie — SameSite=None + Secure so it attaches on native
+    # Capacitor WebView (origin: capacitor://localhost, cross-site to API).
     response.set_cookie(
         key="session_token",
         value=session_token,
         httponly=True,
         secure=True,
-        samesite="lax",
+        samesite="none",
         path="/",
         max_age=7*24*60*60
     )
@@ -265,13 +266,14 @@ async def login(credentials: UserLogin, response: Response):
     }
     await db.user_sessions.insert_one(session_doc)
     
-    # Set cookie
+    # Set cookie — SameSite=None + Secure so it attaches on native
+    # Capacitor WebView (origin: capacitor://localhost, cross-site to API).
     response.set_cookie(
         key="session_token",
         value=session_token,
         httponly=True,
         secure=True,
-        samesite="lax",
+        samesite="none",
         path="/",
         max_age=7*24*60*60
     )
@@ -363,13 +365,14 @@ async def exchange_session(request: Request, response: Response):
     }
     await db.user_sessions.insert_one(session_doc)
     
-    # Set cookie
+    # Set cookie — SameSite=None + Secure so it attaches on native
+    # Capacitor WebView (origin: capacitor://localhost, cross-site to API).
     response.set_cookie(
         key="session_token",
         value=session_token,
         httponly=True,
         secure=True,
-        samesite="lax",
+        samesite="none",
         path="/",
         max_age=7*24*60*60
     )
@@ -1603,9 +1606,18 @@ app.include_router(api_router)
 # When credentials are enabled, browsers require an explicit origin in
 # Access-Control-Allow-Origin. We honour CORS_ORIGINS as a comma-separated
 # allowlist and use CORS_ORIGIN_REGEX for the emergent preview/prod domains.
+#
+# Native Capacitor origins are also whitelisted so the iOS/Android WebView
+# can call the API:
+#   iOS:      capacitor://localhost
+#   Android:  https://localhost   (because androidScheme: "https")
 _cors_origins_raw = os.environ.get('CORS_ORIGINS', '').strip()
-_cors_origin_regex = os.environ.get('CORS_ORIGIN_REGEX', r'^https://[a-z0-9-]+\.preview\.emergentagent\.com$')
+_cors_origin_regex = os.environ.get('CORS_ORIGIN_REGEX', r'^(https://[a-z0-9-]+\.preview\.emergentagent\.com|https://[a-z0-9-]+\.emergent\.host|capacitor://localhost|https://localhost|ionic://localhost)$')
 _cors_origins = [o.strip() for o in _cors_origins_raw.split(',') if o.strip() and o.strip() != '*']
+# Always include native Capacitor origins even if operator forgot to set env var.
+for _native in ("capacitor://localhost", "https://localhost", "ionic://localhost"):
+    if _native not in _cors_origins:
+        _cors_origins.append(_native)
 
 app.add_middleware(
     CORSMiddleware,

@@ -510,7 +510,12 @@ def test_cors_blocks_subdomain_attack():
 
 
 
-# --- iter 10: SECURITY FIX 1 — Cookie SameSite=Lax on all 3 auth endpoints -------
+# --- iter 18: SECURITY UPDATE — Cookie SameSite=None + Secure on all 3 auth endpoints ---
+# Rationale: Native Capacitor iOS webview origin (capacitor://localhost) is
+# cross-site to the API. SameSite=Lax cookies are NOT attached on cross-site
+# requests, which broke auth on native builds. SameSite=None + Secure is the
+# standard hybrid-app pattern. Secure=True is enforced (required to pair with
+# SameSite=None).
 def _get_set_cookies(response):
     """Return list of all Set-Cookie header values (case-insensitive)."""
     # requests exposes raw headers via response.raw.headers.get_all when available;
@@ -529,28 +534,29 @@ def _session_cookie(response):
     return None
 
 
-def test_register_sets_samesite_lax_cookie():
+def test_register_sets_samesite_none_secure_cookie():
     ts = int(time.time() * 1000)
     payload = {
-        "email": f"TEST_kite_iter10_reg_{ts}@example.com",
+        "email": f"TEST_kite_iter18_reg_{ts}@example.com",
         "password": "DreamySky123!",
-        "name": "TEST Iter10 Reg",
+        "name": "TEST Iter18 Reg",
     }
     r = requests.post(f"{API}/auth/register", json=payload)
     assert r.status_code == 200, r.text
     cookie = _session_cookie(r)
     assert cookie is not None, f"session_token cookie missing. Set-Cookie: {_get_set_cookies(r)}"
     low = cookie.lower()
-    assert "samesite=lax" in low, f"Expected SameSite=Lax, got: {cookie}"
-    assert "samesite=none" not in low, f"SameSite=None MUST be gone, got: {cookie}"
+    assert "samesite=none" in low, f"Expected SameSite=None (native support), got: {cookie}"
+    assert "secure" in low, f"Secure attribute MUST be set with SameSite=None, got: {cookie}"
+    assert "httponly" in low, f"HttpOnly MUST be set, got: {cookie}"
 
 
-def test_login_sets_samesite_lax_cookie():
+def test_login_sets_samesite_none_secure_cookie():
     ts = int(time.time() * 1000)
     payload = {
-        "email": f"TEST_kite_iter10_login_{ts}@example.com",
+        "email": f"TEST_kite_iter18_login_{ts}@example.com",
         "password": "DreamySky123!",
-        "name": "TEST Iter10 Login",
+        "name": "TEST Iter18 Login",
     }
     # Register first
     r = requests.post(f"{API}/auth/register", json=payload)
@@ -562,16 +568,16 @@ def test_login_sets_samesite_lax_cookie():
     cookie = _session_cookie(r2)
     assert cookie is not None, f"session_token cookie missing on login: {_get_set_cookies(r2)}"
     low = cookie.lower()
-    assert "samesite=lax" in low, f"Expected SameSite=Lax on login, got: {cookie}"
-    assert "samesite=none" not in low, f"SameSite=None MUST be gone, got: {cookie}"
+    assert "samesite=none" in low, f"Expected SameSite=None on login, got: {cookie}"
+    assert "secure" in low, f"Secure attribute MUST be set with SameSite=None on login, got: {cookie}"
 
 
-def test_session_exchange_endpoint_uses_samesite_lax_in_source():
+def test_session_exchange_endpoint_uses_samesite_none_in_source():
     """
     /api/auth/session requires a valid Emergent OAuth `session_id` from the header
     X-Session-ID. We can't get a real one in tests, so instead verify the source
-    file uses samesite="lax" at the session-exchange cookie call. This validates
-    the fix without requiring live OAuth.
+    file uses samesite="none" at the session-exchange cookie call. This validates
+    that native-app auth stays consistent across all three cookie-setting paths.
     """
     import re
     with open("/app/backend/server.py", "r") as f:
@@ -579,12 +585,12 @@ def test_session_exchange_endpoint_uses_samesite_lax_in_source():
     # find all samesite= arguments
     matches = re.findall(r'samesite\s*=\s*["\']([a-zA-Z]+)["\']', src)
     assert len(matches) >= 3, f"Expected >=3 samesite calls, found {matches}"
-    assert all(m.lower() == "lax" for m in matches), (
-        f"All samesite values must be 'lax', got: {matches}"
+    assert all(m.lower() == "none" for m in matches), (
+        f"All samesite values must be 'none' for native support, got: {matches}"
     )
-    # extra: ensure no samesite="none" survives in the source
-    assert 'samesite="none"' not in src.lower().replace("'", '"'), (
-        "samesite=\"none\" must not remain in server.py"
+    # extra: ensure no samesite="lax" regressions creep back in
+    assert 'samesite="lax"' not in src.lower().replace("'", '"'), (
+        "samesite=\"lax\" must not remain in server.py (breaks native iOS auth)"
     )
 
 
