@@ -35,7 +35,8 @@ export default function PlayPage() {
         params: { limit: 10 },
         withCredentials: true
       });
-      setQuestions(response.data);
+      const questionsData = response?.data?.questions || response?.data;
+      setQuestions(Array.isArray(questionsData) ? questionsData : []);
       setFreeGate(null);
     } catch (error) {
       // Free-tier daily cap: server returns 402 with a structured `detail`.
