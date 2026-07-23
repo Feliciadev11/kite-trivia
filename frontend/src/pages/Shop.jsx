@@ -34,7 +34,8 @@ export default function ShopPage() {
   const loadCharacters = useCallback(async () => {
     try {
       const response = await axios.get(`${API}/characters`, { withCredentials: true });
-      setCharacters(response.data);
+     const charactersData = response?.data?.characters || response?.data;
+     setCharacters(Array.isArray(charactersData) ? charactersData : []);
     } catch {
       toast.error("Failed to load shop items");
     } finally {
