@@ -24,7 +24,7 @@ export default function LeaderboardPage() {
           axios.get(`${API}/leaderboard/my-rank`, { withCredentials: true })
         ]);
         if (alive) {
-          setLeaderboard(leaderboardRes.data);
+          setLeaderboard(Array.isArray(leaderboardRes.data) ? leaderboardRes.data : []);
           setMyRank(rankRes.data);
         }
       } catch (error) {

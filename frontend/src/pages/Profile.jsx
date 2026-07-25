@@ -40,6 +40,8 @@ export default function ProfilePage() {
   }
 
   const data = profile || user;
+  const ownedCharacters = Array.isArray(data?.owned_characters) ? data.owned_characters : [];
+  const unlockedMilestones = Array.isArray(data?.unlocked_milestones) ? data.unlocked_milestones : [];
 
   return (
     <div className="min-h-screen sky-gradient" data-testid="profile-page">
@@ -141,10 +143,10 @@ export default function ProfilePage() {
         >
           <h3 className="font-semibold text-sky-900 mb-4 flex items-center gap-2">
             <span className="text-xl">🪁</span>
-            Characters Owned ({data?.owned_characters?.length || 1})
+            Characters Owned ({ownedCharacters.length || 1})
           </h3>
           <div className="flex flex-wrap gap-3">
-            {data?.owned_characters?.map((charId) => (
+            {ownedCharacters.map((charId) => (
               <div
                 key={charId}
                 className={`p-3 rounded-2xl ${charId === data?.current_character ? 'bg-sky-100 ring-2 ring-sky-400' : 'bg-sky-50'}`}
@@ -166,7 +168,7 @@ export default function ProfilePage() {
         </motion.div>
 
         {/* Sky Wanderer Milestones */}
-        {data?.unlocked_milestones && data.unlocked_milestones.length > 0 && (
+        {unlockedMilestones.length > 0 && (
           <motion.div
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
@@ -176,10 +178,10 @@ export default function ProfilePage() {
           >
             <h3 className="font-semibold text-sky-900 mb-4 flex items-center gap-2">
               <Sparkles className="w-5 h-5 text-amber-500" />
-              Sky Wanderer ({data.unlocked_milestones.length})
+              Sky Wanderer ({unlockedMilestones.length})
             </h3>
             <div className="flex flex-wrap gap-2">
-              {data.unlocked_milestones.map((m) => {
+              {unlockedMilestones.map((m) => {
                 const parts = m.split("_");
                 const lvl = parts[parts.length - 1];
                 const rarity = parts.length === 3 ? parts[1] : parts[2];

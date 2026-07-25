@@ -81,6 +81,7 @@ export default function PlayPage() {
   }, [fetchQuestions]);
 
   const currentQuestion = questions[currentIndex];
+  const currentOptions = Array.isArray(currentQuestion?.options) ? currentQuestion.options : [];
 
   const handleAnswer = async (answerIndex) => {
     if (selectedAnswer !== null || submitting) return;
@@ -111,7 +112,7 @@ export default function PlayPage() {
       }
 
       // Sky Wanderer milestone celebration (if user crossed any progressive gates)
-      if (response.data.new_milestones && response.data.new_milestones.length > 0) {
+      if (Array.isArray(response.data.new_milestones) && response.data.new_milestones.length > 0) {
         setMilestones(response.data.new_milestones);
       }
     } catch (error) {
@@ -321,7 +322,7 @@ export default function PlayPage() {
 
             {/* Options */}
             <div className="space-y-3">
-              {currentQuestion?.options.map((option, index) => {
+              {currentOptions.map((option, index) => {
                 let optionClass = "border-sky-100 bg-white hover:border-sky-300 hover:bg-sky-50";
                 
                 if (selectedAnswer !== null) {

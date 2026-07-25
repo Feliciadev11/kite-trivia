@@ -64,13 +64,13 @@ export const SkyWandererCelebration = ({ milestones, onDismiss }) => {
   const { playSoundEffect } = useAudio();
 
   useEffect(() => {
-    if (milestones && milestones.length > 0) {
+    if (Array.isArray(milestones) && milestones.length > 0) {
       // Play reward chime once on first appearance
       playSoundEffect("reward");
     }
   }, [milestones, playSoundEffect]);
 
-  if (!milestones || milestones.length === 0) return null;
+  if (!Array.isArray(milestones) || milestones.length === 0) return null;
 
   // If multiple milestones cross at once, show the highest-rarity one
   const rarityOrder = { common: 0, rare: 1, epic: 2, legendary: 3 };
