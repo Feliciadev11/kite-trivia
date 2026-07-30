@@ -2,6 +2,7 @@ import { useEffect, useState, useRef, createContext, useContext, useCallback } f
 import "@/App.css";
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom";
 import axios from "axios";
+import { Preferences } from "@capacitor/preferences";
 import { Toaster, toast } from "sonner";
 import { logError } from "./lib/logger";
 
@@ -72,6 +73,14 @@ export const AuthProvider = ({ children }) => {
     const response = await axios.post(`${API}/auth/login`, { email, password }, {
       withCredentials: true
     });
+    const token = response.data?.session_token;
+
+    if (token) {
+      await Preferences.set({
+        key: "session_token",
+        value: token,
+      });
+    }
     setUser(response.data);
     return response.data;
   };

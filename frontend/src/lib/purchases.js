@@ -142,6 +142,66 @@ export async function purchasePackage(pkg) {
   }
 }
 
+// -------------------- One-time (non-subscription) products --------------------
+// Used for a la carte Shop purchases (kites/companions/skies), as opposed to
+// the Premium subscription which goes through getOfferings/purchasePackage.
+// Each purchasable item has its own store product, keyed by character.product_id.
+
+/**
+ * Fetches store product info (localized price, etc.) for the given product
+ * identifiers. Returns { ok, products } where `products` is keyed by
+ * product id.
+ */
+export async function getStoreProducts(productIds) {
+  if (!IS_NATIVE) return { ok: false, reason: "unavailable" };
+  if (!productIds || productIds.length === 0) return { ok: true, products: {} };
+  const mod = await _lazyImport();
+  if (!mod) return { ok: false, reason: "sdk_missing" };
+  try {
+    const result = await mod.Purchases.getProducts({
+      productIdentifiers: productIds,
+      type: "INAPP",
+    });
+    const products = {};
+    for (const p of result?.products || []) {
+      products[p.identifier] = p;
+    }
+    return { ok: true, products };
+  } catch (e) {
+    logError("getStoreProducts failed", e);
+    return { ok: false, reason: "fetch_failed", error: String(e?.message || e) };
+  }
+}
+
+/**
+ * Purchases a single non-subscription store product (as returned by
+ * `getStoreProducts`). Returns
+ * { ok, transactionId, productId, canceled?, error? }.
+ */
+export async function purchaseProduct(product) {
+  if (!IS_NATIVE) return { ok: false, reason: "unavailable" };
+  const mod = await _lazyImport();
+  if (!mod) return { ok: false, reason: "sdk_missing" };
+  try {
+    const result = await mod.Purchases.purchaseStoreProduct({ product });
+    const txns = result?.customerInfo?.nonSubscriptionTransactions || [];
+    const productId = product.identifier;
+    const txn = txns.find((t) => t.productIdentifier === productId) || txns[txns.length - 1];
+    return {
+      ok: true,
+      transactionId: txn?.transactionIdentifier || null,
+      productId,
+      customerInfo: result?.customerInfo,
+    };
+  } catch (e) {
+    if (e?.userCancelled) {
+      return { ok: false, canceled: true, reason: "canceled" };
+    }
+    logError("purchaseProduct failed", e);
+    return { ok: false, reason: "purchase_failed", error: String(e?.message || e) };
+  }
+}
+
 // -------------------- Restore --------------------
 /**
  * Restore prior purchases (required by both Apple and Google reviewers).

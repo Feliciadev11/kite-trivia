@@ -101,6 +101,7 @@ class Character(BaseModel):
     rarity: str = "common"  # common, rare, epic, legendary
     image_url: str
     unlock_level: int = 0
+    product_id: Optional[str] = None  # RevenueCat/store one-time IAP product identifier
 
 class TriviaQuestion(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -127,7 +128,16 @@ class LeaderboardEntry(BaseModel):
 
 class PurchaseRequest(BaseModel):
     character_id: str
-    origin_url: Optional[str] = None
+
+
+class PurchaseSyncPayload(BaseModel):
+    """Sent by the mobile client right after a RevenueCat one-time purchase
+    completes. The backend independently re-verifies against RevenueCat's
+    REST API before granting — this payload is a claim, not proof.
+    """
+    character_id: str
+    product_id: str
+    transaction_id: str
 
 # ==================== AUTH HELPERS ====================
 
@@ -774,21 +784,40 @@ async def sync_premium(
 
 @api_router.post("/premium/webhook")
 async def premium_webhook(request: Request):
-    """RevenueCat webhook stub.
+    """RevenueCat webhook — authoritative, idempotent grant path for both the
+    Premium subscription and one-time item purchases (NON_RENEWING_PURCHASE).
 
     Configure in RevenueCat dashboard → Integrations → Webhooks with URL
-    `https://<your-backend>/api/premium/webhook`. Payload includes the
-    app_user_id which we set to our internal user_id at sign-in.
-
-    Body signing (X-RevenueCat-Signature) verification is left as a TODO
-    once you have the webhook secret from RevenueCat.
+    `https://<your-backend>/api/premium/webhook` and the same secret as
+    REVENUECAT_WEBHOOK_SECRET below (RevenueCat sends it back as a static
+    `Authorization: Bearer <secret>` header — not HMAC-signed like Stripe).
     """
+    webhook_secret = os.environ.get("REVENUECAT_WEBHOOK_SECRET")
+    if webhook_secret:
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header != f"Bearer {webhook_secret}":
+            raise HTTPException(status_code=401, detail="Invalid webhook auth")
+
     try:
         body = await request.json()
     except Exception:
         return {"received": True}
-    # Best-effort: no secret configured yet, so we only accept as read-only.
-    logger.info(f"[premium/webhook] event={body.get('event', {}).get('type')} user={body.get('event', {}).get('app_user_id')}")
+
+    event = body.get("event", {}) or {}
+    event_type = event.get("type")
+    app_user_id = event.get("app_user_id")
+    logger.info(f"[premium/webhook] event={event_type} user={app_user_id}")
+
+    if event_type == "NON_RENEWING_PURCHASE" and app_user_id:
+        product_id = event.get("product_id")
+        transaction_id = event.get("id") or event.get("transaction_id")
+        character = await db.characters.find_one({"product_id": product_id}, {"_id": 0})
+        if character and transaction_id:
+            await _grant_purchase(
+                app_user_id, character["character_id"], character.get("category", "kite"),
+                transaction_id, source="webhook",
+            )
+
     return {"received": True}
 
 
@@ -1087,47 +1116,13 @@ async def equip_character(
         )
         return {"message": "Character equipped", "character_id": character_id}
 
-# ---------------------------------------------------------------------------
-# Open-Redirect defense for Stripe checkout URLs (CWE-601).
-# `origin_url` in PurchaseRequest is client-supplied and would otherwise be
-# echoed into success_url/cancel_url. We only honour it when it matches the
-# same allowlist we use for CORS.
-# ---------------------------------------------------------------------------
-import re as _re
-
-def _origin_allowlist():
-    raw = os.environ.get("CORS_ORIGINS", "").strip()
-    origins = [o.strip().rstrip("/") for o in raw.split(",") if o.strip() and o.strip() != "*"]
-    regex = os.environ.get("CORS_ORIGIN_REGEX", r"^https://[a-z0-9-]+\.preview\.emergentagent\.com$")
-    return origins, regex
-
-def _resolve_safe_origin(candidate: Optional[str], request: Request) -> str:
-    """Return `candidate` iff it matches the CORS allowlist; else fall back
-    to the backend's own base_url (safe by construction)."""
-    fallback = str(request.base_url).rstrip("/")
-    if not candidate or not isinstance(candidate, str):
-        return fallback
-    candidate = candidate.strip().rstrip("/")
-    if not (candidate.startswith("http://") or candidate.startswith("https://")):
-        return fallback
-    origins, regex = _origin_allowlist()
-    if candidate in origins:
-        return candidate
-    if regex and _re.match(regex, candidate):
-        return candidate
-    return fallback
-
-
-@api_router.post("/characters/purchase")
-async def purchase_character(
+@api_router.post("/characters/claim")
+async def claim_free_character(
     purchase: PurchaseRequest,
-    request: Request,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
-    """Create a Stripe Checkout Session for the requested item."""
-    from emergentintegrations.payments.stripe.checkout import (
-        StripeCheckout, CheckoutSessionRequest,
-    )
+    """Grant a free (price <= 0) catalog item directly. Paid items go through
+    RevenueCat — see /characters/purchase/sync."""
     character = await db.characters.find_one(
         {"character_id": purchase.character_id},
         {"_id": 0}
@@ -1136,203 +1131,116 @@ async def purchase_character(
         raise HTTPException(status_code=404, detail="Character not found")
 
     category = character.get("category", "kite")
-    if category == "companion":
-        owned_list = current_user.owned_companions
-    elif category == "sky_theme":
-        owned_list = current_user.owned_sky_themes
-    else:
-        owned_list = current_user.owned_characters
+    field_map = {"companion": "owned_companions", "sky_theme": "owned_sky_themes"}
+    field = field_map.get(category, "owned_characters")
+    owned_list = getattr(current_user, field)
 
     if purchase.character_id in owned_list:
         raise HTTPException(status_code=400, detail="Already owned")
 
     effective_lvl = _effective_unlock_level(character)
     if effective_lvl > current_user.level:
-        raise HTTPException(
-            status_code=403,
-            detail=f"Requires level {effective_lvl}",
-        )
+        raise HTTPException(status_code=403, detail=f"Requires level {effective_lvl}")
 
     # Server-side authoritative pricing — never trust frontend
     price_usd = float(character["price"])
-    if price_usd <= 0:
-        # Free items: grant directly
-        field_map = {"companion": "owned_companions", "sky_theme": "owned_sky_themes"}
-        field = field_map.get(category, "owned_characters")
-        await db.users.update_one(
-            {"user_id": current_user.user_id},
-            {"$addToSet": {field: purchase.character_id}},
-        )
-        return {"free": True, "granted": True, "character_id": purchase.character_id}
+    if price_usd > 0:
+        raise HTTPException(status_code=400, detail="This item requires payment")
 
-    # Build success/cancel URLs from the request origin (provided by frontend).
-    # SECURITY: origin_url is client-controlled — validate against the CORS
-    # allowlist to prevent Open Redirect (CWE-601). If unknown, fall back to
-    # the request's own base_url (backend-derived, safe).
-    origin = _resolve_safe_origin(purchase.origin_url, request)
-    success_url = f"{origin.rstrip('/')}/shop?session_id={{CHECKOUT_SESSION_ID}}"
-    cancel_url = f"{origin.rstrip('/')}/shop?canceled=1"
-
-    api_key = os.environ.get("STRIPE_API_KEY")
-    if not api_key:
-        raise HTTPException(status_code=500, detail="Payments not configured")
-
-    host_url = str(request.base_url)
-    webhook_url = f"{host_url.rstrip('/')}/api/webhook/stripe"
-    stripe_checkout = StripeCheckout(api_key=api_key, webhook_url=webhook_url)
-
-    metadata = {
-        "user_id": current_user.user_id,
-        "character_id": purchase.character_id,
-        "category": category,
-        "source": "kite_shop",
-    }
-    checkout_request = CheckoutSessionRequest(
-        amount=price_usd,
-        currency="usd",
-        success_url=success_url,
-        cancel_url=cancel_url,
-        metadata=metadata,
+    await db.users.update_one(
+        {"user_id": current_user.user_id},
+        {"$addToSet": {field: purchase.character_id}},
     )
-    session = await stripe_checkout.create_checkout_session(checkout_request)
-
-    # MANDATORY: store transaction BEFORE redirect
-    now = datetime.now(timezone.utc)
-    await db.payment_transactions.insert_one({
-        "session_id": session.session_id,
-        "user_id": current_user.user_id,
-        "character_id": purchase.character_id,
-        "category": category,
-        "amount": price_usd,
-        "currency": "usd",
-        "payment_status": "initiated",
-        "status": "open",
-        "granted": False,
-        "metadata": metadata,
-        "created_at": now.isoformat(),
-        "updated_at": now.isoformat(),
-    })
-
-    return {
-        "session_id": session.session_id,
-        "url": session.url,
-        "amount": price_usd,
-    }
+    return {"free": True, "granted": True, "character_id": purchase.character_id}
 
 
-@api_router.get("/payments/checkout/status/{session_id}")
-async def get_checkout_status(
-    session_id: str,
-    request: Request,
+REVENUECAT_API_BASE = "https://api.revenuecat.com/v1"
+
+
+async def _grant_purchase(
+    user_id: str, character_id: str, category: str, transaction_id: str, source: str
+) -> bool:
+    """Idempotently grant a purchased item, keyed on the RevenueCat
+    transaction id so a racing /purchase/sync call and webhook delivery for
+    the same purchase only grant once. Returns True iff this call is the one
+    that granted it."""
+    field_map = {"companion": "owned_companions", "sky_theme": "owned_sky_themes"}
+    field = field_map.get(category, "owned_characters")
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    result = await db.purchase_transactions.update_one(
+        {"transaction_id": transaction_id},
+        {"$setOnInsert": {
+            "transaction_id": transaction_id,
+            "user_id": user_id,
+            "character_id": character_id,
+            "category": category,
+            "source": source,
+            "granted_at": now_iso,
+        }},
+        upsert=True,
+    )
+    if not result.upserted_id:
+        return False  # already granted by a prior sync call or webhook delivery
+
+    await db.users.update_one(
+        {"user_id": user_id},
+        {"$addToSet": {field: character_id}},
+    )
+    return True
+
+
+@api_router.post("/characters/purchase/sync")
+async def sync_character_purchase(
+    payload: PurchaseSyncPayload,
     current_user: User = Depends(get_current_user),
 ):
-    """Poll Stripe for the latest session status and grant the item once."""
-    from emergentintegrations.payments.stripe.checkout import StripeCheckout
-
-    txn = await db.payment_transactions.find_one(
-        {"session_id": session_id, "user_id": current_user.user_id},
-        {"_id": 0},
+    """Client calls this right after a RevenueCat one-time purchase completes
+    on-device. The payload is a pointer, not proof — we independently verify
+    the transaction against RevenueCat's REST API before granting anything.
+    The /premium/webhook NON_RENEWING_PURCHASE handler is the authoritative
+    backstop if this call never lands (app killed mid-purchase, etc).
+    """
+    character = await db.characters.find_one(
+        {"character_id": payload.character_id}, {"_id": 0}
     )
-    if not txn:
-        raise HTTPException(status_code=404, detail="Transaction not found")
+    if not character:
+        raise HTTPException(status_code=404, detail="Character not found")
+    if not character.get("product_id") or character["product_id"] != payload.product_id:
+        raise HTTPException(status_code=400, detail="Product mismatch")
 
-    # Already granted — return cached state
-    if txn.get("granted"):
-        return {
-            "payment_status": txn.get("payment_status", "paid"),
-            "status": txn.get("status", "complete"),
-            "granted": True,
-            "character_id": txn["character_id"],
-        }
+    secret_key = os.environ.get("REVENUECAT_SECRET_API_KEY")
+    if not secret_key:
+        raise HTTPException(status_code=500, detail="Purchase verification not configured")
 
-    api_key = os.environ.get("STRIPE_API_KEY")
-    host_url = str(request.base_url)
-    webhook_url = f"{host_url.rstrip('/')}/api/webhook/stripe"
-    stripe_checkout = StripeCheckout(api_key=api_key, webhook_url=webhook_url)
-    status_response = await stripe_checkout.get_checkout_status(session_id)
-
-    now_iso = datetime.now(timezone.utc).isoformat()
-    update = {
-        "payment_status": status_response.payment_status,
-        "status": status_response.status,
-        "updated_at": now_iso,
-    }
-
-    granted = False
-    if status_response.payment_status == "paid" and not txn.get("granted"):
-        # Grant the item idempotently
-        category = txn.get("category", "kite")
-        field_map = {"companion": "owned_companions", "sky_theme": "owned_sky_themes"}
-        field = field_map.get(category, "owned_characters")
-
-        # Atomically mark granted=true and set granted_at
-        result = await db.payment_transactions.update_one(
-            {"session_id": session_id, "granted": {"$ne": True}},
-            {"$set": {**update, "granted": True, "granted_at": now_iso}},
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        resp = await client.get(
+            f"{REVENUECAT_API_BASE}/subscribers/{current_user.user_id}",
+            headers={"Authorization": f"Bearer {secret_key}"},
         )
-        if result.modified_count == 1:
-            await db.users.update_one(
-                {"user_id": current_user.user_id},
-                {"$addToSet": {field: txn["character_id"]}},
-            )
-            granted = True
-    else:
-        await db.payment_transactions.update_one(
-            {"session_id": session_id},
-            {"$set": update},
-        )
+    if resp.status_code != 200:
+        raise HTTPException(status_code=502, detail="Could not reach RevenueCat")
 
+    subscriber = resp.json().get("subscriber", {})
+    transactions = (subscriber.get("non_subscriptions", {}) or {}).get(payload.product_id, [])
+    verified = any(
+        t.get("id") == payload.transaction_id or t.get("store_transaction_id") == payload.transaction_id
+        for t in transactions
+    )
+    if not verified:
+        # RevenueCat may not have propagated the transaction yet — not a hard failure.
+        return {"ok": False, "granted": False, "reason": "not_yet_visible"}
+
+    newly_granted = await _grant_purchase(
+        current_user.user_id, payload.character_id, character.get("category", "kite"),
+        payload.transaction_id, source="sync",
+    )
     return {
-        "payment_status": status_response.payment_status,
-        "status": status_response.status,
-        "granted": granted or bool(txn.get("granted")),
-        "character_id": txn["character_id"],
+        "ok": True,
+        "granted": True,
+        "character_id": payload.character_id,
+        "newly_granted": newly_granted,
     }
-
-
-@api_router.post("/webhook/stripe")
-async def stripe_webhook(request: Request):
-    """Stripe webhook for redundant payment confirmation (idempotent)."""
-    from emergentintegrations.payments.stripe.checkout import StripeCheckout
-
-    api_key = os.environ.get("STRIPE_API_KEY")
-    host_url = str(request.base_url)
-    webhook_url = f"{host_url.rstrip('/')}/api/webhook/stripe"
-    stripe_checkout = StripeCheckout(api_key=api_key, webhook_url=webhook_url)
-    body = await request.body()
-    sig = request.headers.get("Stripe-Signature")
-    try:
-        evt = await stripe_checkout.handle_webhook(body, sig)
-    except Exception as e:
-        logger.warning(f"Webhook verification failed: {e}")
-        raise HTTPException(status_code=400, detail="Invalid webhook")
-
-    if evt.payment_status == "paid" and evt.session_id:
-        txn = await db.payment_transactions.find_one(
-            {"session_id": evt.session_id}, {"_id": 0}
-        )
-        if txn and not txn.get("granted"):
-            category = txn.get("category", "kite")
-            field_map = {"companion": "owned_companions", "sky_theme": "owned_sky_themes"}
-            field = field_map.get(category, "owned_characters")
-            now_iso = datetime.now(timezone.utc).isoformat()
-            result = await db.payment_transactions.update_one(
-                {"session_id": evt.session_id, "granted": {"$ne": True}},
-                {"$set": {
-                    "payment_status": "paid",
-                    "status": "complete",
-                    "granted": True,
-                    "granted_at": now_iso,
-                    "updated_at": now_iso,
-                }},
-            )
-            if result.modified_count == 1:
-                await db.users.update_one(
-                    {"user_id": txn["user_id"]},
-                    {"$addToSet": {field: txn["character_id"]}},
-                )
-
-    return {"received": True}
 
 
 # ==================== LEADERBOARD ROUTES ====================
@@ -1499,80 +1407,80 @@ async def seed_characters():
         {"character_id": "basic_kite", "name": "Basic Kite", "description": "A classic diamond kite to start your journey", "price": 0, "category": "kite", "rarity": "common", "image_url": "kite_basic", "unlock_level": 0},
         
         # Common Kites (Level 1-2)
-        {"character_id": "rainbow_kite", "name": "Rainbow Kite", "description": "A gentle arc of colors dancing in the breeze", "price": 1.99, "category": "kite", "rarity": "common", "image_url": "kite_rainbow", "unlock_level": 1},
-        {"character_id": "heart_kite", "name": "Heart Kite", "description": "A lovely heart that floats with warmth", "price": 1.99, "category": "kite", "rarity": "common", "image_url": "kite_heart", "unlock_level": 1},
-        {"character_id": "cloud_kite", "name": "Cloud Kite", "description": "As soft and dreamy as the clouds themselves", "price": 2.49, "category": "kite", "rarity": "common", "image_url": "kite_cloud", "unlock_level": 2},
-        {"character_id": "butterfly_kite", "name": "Butterfly Kite", "description": "Delicate wings that catch the gentle wind", "price": 2.49, "category": "kite", "rarity": "common", "image_url": "kite_butterfly", "unlock_level": 2},
+        {"character_id": "rainbow_kite", "name": "Rainbow Kite", "description": "A gentle arc of colors dancing in the breeze", "price": 1.99, "category": "kite", "rarity": "common", "image_url": "kite_rainbow", "unlock_level": 1, "product_id": "kite_rainbow_kite"},
+        {"character_id": "heart_kite", "name": "Heart Kite", "description": "A lovely heart that floats with warmth", "price": 1.99, "category": "kite", "rarity": "common", "image_url": "kite_heart", "unlock_level": 1, "product_id": "kite_heart_kite"},
+        {"character_id": "cloud_kite", "name": "Cloud Kite", "description": "As soft and dreamy as the clouds themselves", "price": 2.49, "category": "kite", "rarity": "common", "image_url": "kite_cloud", "unlock_level": 2, "product_id": "kite_cloud_kite"},
+        {"character_id": "butterfly_kite", "name": "Butterfly Kite", "description": "Delicate wings that catch the gentle wind", "price": 2.49, "category": "kite", "rarity": "common", "image_url": "kite_butterfly", "unlock_level": 2, "product_id": "kite_butterfly_kite"},
         
         # Rare Kites (Level 3-4)
-        {"character_id": "star_kite", "name": "Star Kite", "description": "A twinkling star that glows softly at dusk", "price": 3.99, "category": "kite", "rarity": "rare", "image_url": "kite_star", "unlock_level": 3},
-        {"character_id": "owl_kite", "name": "Owl Kite", "description": "A wise companion for evening flights", "price": 3.99, "category": "kite", "rarity": "rare", "image_url": "kite_owl", "unlock_level": 3},
-        {"character_id": "fish_kite", "name": "Koi Fish Kite", "description": "Graceful as a koi swimming through sky-waters", "price": 3.49, "category": "kite", "rarity": "rare", "image_url": "kite_fish", "unlock_level": 3},
-        {"character_id": "retro_rainbow", "name": "Retro Rainbow Kite", "description": "Nostalgic vibes from simpler times", "price": 4.49, "category": "kite", "rarity": "rare", "image_url": "kite_retro", "unlock_level": 4},
-        {"character_id": "sakura_kite", "name": "Sakura Blossom Kite", "description": "Cherry blossoms drift eternally on this peaceful kite", "price": 4.99, "category": "kite", "rarity": "rare", "image_url": "kite_sakura", "unlock_level": 4},
+        {"character_id": "star_kite", "name": "Star Kite", "description": "A twinkling star that glows softly at dusk", "price": 3.99, "category": "kite", "rarity": "rare", "image_url": "kite_star", "unlock_level": 3, "product_id": "kite_star_kite"},
+        {"character_id": "owl_kite", "name": "Owl Kite", "description": "A wise companion for evening flights", "price": 3.99, "category": "kite", "rarity": "rare", "image_url": "kite_owl", "unlock_level": 3, "product_id": "kite_owl_kite"},
+        {"character_id": "fish_kite", "name": "Koi Fish Kite", "description": "Graceful as a koi swimming through sky-waters", "price": 3.49, "category": "kite", "rarity": "rare", "image_url": "kite_fish", "unlock_level": 3, "product_id": "kite_koi_fish_kite"},
+        {"character_id": "retro_rainbow", "name": "Retro Rainbow Kite", "description": "Nostalgic vibes from simpler times", "price": 4.49, "category": "kite", "rarity": "rare", "image_url": "kite_retro", "unlock_level": 4, "product_id": "kite_retro_rainbow_kite"},
+        {"character_id": "sakura_kite", "name": "Sakura Blossom Kite", "description": "Cherry blossoms drift eternally on this peaceful kite", "price": 4.99, "category": "kite", "rarity": "rare", "image_url": "kite_sakura", "unlock_level": 4, "product_id": "kite_sakura_blossom_kite"},
         
         # Epic Kites (Level 5-7)
-        {"character_id": "celestial_kite", "name": "Celestial Kite", "description": "Woven from starlight and moonbeams", "price": 5.99, "category": "kite", "rarity": "epic", "image_url": "kite_celestial", "unlock_level": 5},
-        {"character_id": "dragon_kite", "name": "Dragon Kite", "description": "A gentle dragon that rides the wind currents", "price": 5.99, "category": "kite", "rarity": "epic", "image_url": "kite_dragon", "unlock_level": 5},
-        {"character_id": "moon_stars_kite", "name": "Moon & Stars Kite", "description": "The night sky captured in fabric and string", "price": 6.49, "category": "kite", "rarity": "epic", "image_url": "kite_moon", "unlock_level": 6},
-        {"character_id": "jellyfish_kite", "name": "Jellyfish Kite", "description": "Ethereal tentacles flow like underwater dreams", "price": 6.99, "category": "kite", "rarity": "epic", "image_url": "kite_jellyfish", "unlock_level": 6},
-        {"character_id": "storm_kite", "name": "Storm Kite", "description": "Calm within the tempest, beautiful in its power", "price": 6.99, "category": "kite", "rarity": "epic", "image_url": "kite_storm", "unlock_level": 7},
-        {"character_id": "eagle_kite", "name": "Eagle Kite", "description": "Majestic and free, soaring above all", "price": 6.99, "category": "kite", "rarity": "epic", "image_url": "kite_eagle", "unlock_level": 7},
+        {"character_id": "celestial_kite", "name": "Celestial Kite", "description": "Woven from starlight and moonbeams", "price": 5.99, "category": "kite", "rarity": "epic", "image_url": "kite_celestial", "unlock_level": 5, "product_id": "kite_celestial_kite"},
+        {"character_id": "dragon_kite", "name": "Dragon Kite", "description": "A gentle dragon that rides the wind currents", "price": 5.99, "category": "kite", "rarity": "epic", "image_url": "kite_dragon", "unlock_level": 5, "product_id": "kite_dragon_kite"},
+        {"character_id": "moon_stars_kite", "name": "Moon & Stars Kite", "description": "The night sky captured in fabric and string", "price": 6.49, "category": "kite", "rarity": "epic", "image_url": "kite_moon", "unlock_level": 6, "product_id": "kite_moon_and_stars_kite"},
+        {"character_id": "jellyfish_kite", "name": "Jellyfish Kite", "description": "Ethereal tentacles flow like underwater dreams", "price": 6.99, "category": "kite", "rarity": "epic", "image_url": "kite_jellyfish", "unlock_level": 6, "product_id": "kite_jellyfish_kite"},
+        {"character_id": "storm_kite", "name": "Storm Kite", "description": "Calm within the tempest, beautiful in its power", "price": 6.99, "category": "kite", "rarity": "epic", "image_url": "kite_storm", "unlock_level": 7, "product_id": "kite_storm_kite"},
+        {"character_id": "eagle_kite", "name": "Eagle Kite", "description": "Majestic and free, soaring above all", "price": 6.99, "category": "kite", "rarity": "epic", "image_url": "kite_eagle", "unlock_level": 7, "product_id": "kite_eagle_kite"},
         
         # Legendary Kites (Level 8+)
-        {"character_id": "phoenix_kite", "name": "Phoenix Kite", "description": "Reborn with each sunrise, eternally radiant", "price": 9.99, "category": "kite", "rarity": "legendary", "image_url": "kite_phoenix", "unlock_level": 8},
-        {"character_id": "black_gold_kite", "name": "Black & Gold Luxury Kite", "description": "Elegant sophistication against any sky", "price": 9.99, "category": "kite", "rarity": "legendary", "image_url": "kite_luxury", "unlock_level": 8},
-        {"character_id": "neon_cyber_kite", "name": "Neon Cyber Kite", "description": "A glimpse into dreamy digital horizons", "price": 11.99, "category": "kite", "rarity": "legendary", "image_url": "kite_cyber", "unlock_level": 10},
-        {"character_id": "aurora_kite", "name": "Aurora Kite", "description": "Dancing lights of the northern sky", "price": 12.99, "category": "kite", "rarity": "legendary", "image_url": "kite_aurora", "unlock_level": 12},
+        {"character_id": "phoenix_kite", "name": "Phoenix Kite", "description": "Reborn with each sunrise, eternally radiant", "price": 9.99, "category": "kite", "rarity": "legendary", "image_url": "kite_phoenix", "unlock_level": 8, "product_id": "kite_phoenix_kite"},
+        {"character_id": "black_gold_kite", "name": "Black & Gold Luxury Kite", "description": "Elegant sophistication against any sky", "price": 9.99, "category": "kite", "rarity": "legendary", "image_url": "kite_luxury", "unlock_level": 8, "product_id": "kite_black_and_gold_luxury_kite"},
+        {"character_id": "neon_cyber_kite", "name": "Neon Cyber Kite", "description": "A glimpse into dreamy digital horizons", "price": 11.99, "category": "kite", "rarity": "legendary", "image_url": "kite_cyber", "unlock_level": 10, "product_id": "kite_neon_cyber_kite"},
+        {"character_id": "aurora_kite", "name": "Aurora Kite", "description": "Dancing lights of the northern sky", "price": 12.99, "category": "kite", "rarity": "legendary", "image_url": "kite_aurora", "unlock_level": 12, "product_id": "kite_aurora_kite"},
         
         # ========== COMPANIONS ==========
         # Common Companions (Level 2-3)
-        {"character_id": "fox_companion", "name": "Little Fox", "description": "A curious fox that follows your kite", "price": 2.99, "category": "companion", "rarity": "common", "image_url": "companion_fox", "unlock_level": 2},
-        {"character_id": "owl_companion", "name": "Night Owl", "description": "A wise owl companion for evening adventures", "price": 2.99, "category": "companion", "rarity": "common", "image_url": "companion_owl", "unlock_level": 2},
-        {"character_id": "black_cat", "name": "Black Cat", "description": "A mysterious feline friend bringing good luck", "price": 2.99, "category": "companion", "rarity": "common", "image_url": "companion_cat", "unlock_level": 3},
-        {"character_id": "corgi_aviator", "name": "Aviator Corgi", "description": "A fluffy pilot ready for sky adventures", "price": 3.49, "category": "companion", "rarity": "common", "image_url": "companion_corgi", "unlock_level": 3},
+        {"character_id": "fox_companion", "name": "Little Fox", "description": "A curious fox that follows your kite", "price": 2.99, "category": "companion", "rarity": "common", "image_url": "companion_fox", "unlock_level": 2, "product_id": "companion_little_fox"},
+        {"character_id": "owl_companion", "name": "Night Owl", "description": "A wise owl companion for evening adventures", "price": 2.99, "category": "companion", "rarity": "common", "image_url": "companion_owl", "unlock_level": 2, "product_id": "companion_night_owl"},
+        {"character_id": "black_cat", "name": "Black Cat", "description": "A mysterious feline friend bringing good luck", "price": 2.99, "category": "companion", "rarity": "common", "image_url": "companion_cat", "unlock_level": 3, "product_id": "companion_black_cat"},
+        {"character_id": "corgi_aviator", "name": "Aviator Corgi", "description": "A fluffy pilot ready for sky adventures", "price": 3.49, "category": "companion", "rarity": "common", "image_url": "companion_corgi", "unlock_level": 3, "product_id": "companion_aviator_corgi"},
         
         # Rare Companions (Level 4-5)
-        {"character_id": "red_panda", "name": "Red Panda", "description": "A gentle red panda napping on the breeze", "price": 4.49, "category": "companion", "rarity": "rare", "image_url": "companion_panda", "unlock_level": 4},
-        {"character_id": "snow_fox", "name": "Snow Fox", "description": "An arctic beauty with eyes like winter stars", "price": 4.99, "category": "companion", "rarity": "rare", "image_url": "companion_snowfox", "unlock_level": 5},
-        {"character_id": "raven_companion", "name": "Raven", "description": "A mystical raven that speaks in riddles", "price": 4.99, "category": "companion", "rarity": "rare", "image_url": "companion_raven", "unlock_level": 5},
+        {"character_id": "red_panda", "name": "Red Panda", "description": "A gentle red panda napping on the breeze", "price": 4.49, "category": "companion", "rarity": "rare", "image_url": "companion_panda", "unlock_level": 4, "product_id": "companion_red_panda"},
+        {"character_id": "snow_fox", "name": "Snow Fox", "description": "An arctic beauty with eyes like winter stars", "price": 4.99, "category": "companion", "rarity": "rare", "image_url": "companion_snowfox", "unlock_level": 5, "product_id": "companion_snow_fox"},
+        {"character_id": "raven_companion", "name": "Raven", "description": "A mystical raven that speaks in riddles", "price": 4.99, "category": "companion", "rarity": "rare", "image_url": "companion_raven", "unlock_level": 5, "product_id": "companion_raven"},
         
         # Epic Companions (Level 6-7)
-        {"character_id": "firefly_swarm", "name": "Firefly Swarm", "description": "Dancing lights that follow your journey", "price": 5.99, "category": "companion", "rarity": "epic", "image_url": "companion_fireflies", "unlock_level": 6},
-        {"character_id": "jellyfish_creature", "name": "Floating Jellyfish", "description": "An ethereal creature from dreamy depths", "price": 6.49, "category": "companion", "rarity": "epic", "image_url": "companion_jellyfish", "unlock_level": 7},
+        {"character_id": "firefly_swarm", "name": "Firefly Swarm", "description": "Dancing lights that follow your journey", "price": 5.99, "category": "companion", "rarity": "epic", "image_url": "companion_fireflies", "unlock_level": 6, "product_id": "companion_firefly_swarm"},
+        {"character_id": "jellyfish_creature", "name": "Floating Jellyfish", "description": "An ethereal creature from dreamy depths", "price": 6.49, "category": "companion", "rarity": "epic", "image_url": "companion_jellyfish", "unlock_level": 7, "product_id": "companion_floating_jellyfish"},
         
         # Legendary Companions (Level 8+)
-        {"character_id": "tiny_dragon", "name": "Tiny Dragon", "description": "A small dragon with a big heart", "price": 8.99, "category": "companion", "rarity": "legendary", "image_url": "companion_dragon", "unlock_level": 8},
-        {"character_id": "spirit_deer", "name": "Spirit Deer", "description": "A celestial deer made of stardust", "price": 9.99, "category": "companion", "rarity": "legendary", "image_url": "companion_deer", "unlock_level": 10},
+        {"character_id": "tiny_dragon", "name": "Tiny Dragon", "description": "A small dragon with a big heart", "price": 8.99, "category": "companion", "rarity": "legendary", "image_url": "companion_dragon", "unlock_level": 8, "product_id": "companion_tiny_dragon"},
+        {"character_id": "spirit_deer", "name": "Spirit Deer", "description": "A celestial deer made of stardust", "price": 9.99, "category": "companion", "rarity": "legendary", "image_url": "companion_deer", "unlock_level": 10, "product_id": "companion_spirit_deer"},
         
         # ========== SKY THEMES ==========
         # Free starter
         {"character_id": "dawn", "name": "Dawn Sky", "description": "Soft morning light breaking through", "price": 0, "category": "sky_theme", "rarity": "common", "image_url": "sky_dawn", "unlock_level": 0},
         
         # Common Sky Themes
-        {"character_id": "clear_day", "name": "Clear Day", "description": "Bright blue skies with gentle clouds", "price": 1.99, "category": "sky_theme", "rarity": "common", "image_url": "sky_day", "unlock_level": 2},
-        {"character_id": "sunset_glow", "name": "Sunset Glow", "description": "Warm oranges and pinks of evening", "price": 2.49, "category": "sky_theme", "rarity": "common", "image_url": "sky_sunset", "unlock_level": 3},
+        {"character_id": "clear_day", "name": "Clear Day", "description": "Bright blue skies with gentle clouds", "price": 1.99, "category": "sky_theme", "rarity": "common", "image_url": "sky_day", "unlock_level": 2, "product_id": "theme_clear_day"},
+        {"character_id": "sunset_glow", "name": "Sunset Glow", "description": "Warm oranges and pinks of evening", "price": 2.49, "category": "sky_theme", "rarity": "common", "image_url": "sky_sunset", "unlock_level": 3, "product_id": "theme_sunset_glow"},
         
         # Rare Sky Themes
-        {"character_id": "twilight", "name": "Twilight", "description": "The magical hour between day and night", "price": 3.49, "category": "sky_theme", "rarity": "rare", "image_url": "sky_twilight", "unlock_level": 4},
-        {"character_id": "cloudy_dreams", "name": "Cloudy Dreams", "description": "Soft, dreamy clouds on a gentle day", "price": 3.49, "category": "sky_theme", "rarity": "rare", "image_url": "sky_cloudy", "unlock_level": 4},
-        {"character_id": "golden_hour", "name": "Golden Hour", "description": "Everything glows with warm, soft light", "price": 3.99, "category": "sky_theme", "rarity": "rare", "image_url": "sky_golden", "unlock_level": 5},
+        {"character_id": "twilight", "name": "Twilight", "description": "The magical hour between day and night", "price": 3.49, "category": "sky_theme", "rarity": "rare", "image_url": "sky_twilight", "unlock_level": 4, "product_id": "theme_twilight"},
+        {"character_id": "cloudy_dreams", "name": "Cloudy Dreams", "description": "Soft, dreamy clouds on a gentle day", "price": 3.49, "category": "sky_theme", "rarity": "rare", "image_url": "sky_cloudy", "unlock_level": 4, "product_id": "theme_cloudy_dreams"},
+        {"character_id": "golden_hour", "name": "Golden Hour", "description": "Everything glows with warm, soft light", "price": 3.99, "category": "sky_theme", "rarity": "rare", "image_url": "sky_golden", "unlock_level": 5, "product_id": "theme_golden_hour"},
         
         # Epic Sky Themes
-        {"character_id": "starry_night", "name": "Starry Night", "description": "A canvas of twinkling stars", "price": 4.99, "category": "sky_theme", "rarity": "epic", "image_url": "sky_stars", "unlock_level": 6},
-        {"character_id": "moonlit", "name": "Moonlit", "description": "Silver moonlight illuminates the world", "price": 5.49, "category": "sky_theme", "rarity": "epic", "image_url": "sky_moon", "unlock_level": 7},
-        {"character_id": "gentle_rain", "name": "Gentle Rain", "description": "Soft rain with distant rolling clouds", "price": 5.49, "category": "sky_theme", "rarity": "epic", "image_url": "sky_rain", "unlock_level": 7},
+        {"character_id": "starry_night", "name": "Starry Night", "description": "A canvas of twinkling stars", "price": 4.99, "category": "sky_theme", "rarity": "epic", "image_url": "sky_stars", "unlock_level": 6, "product_id": "theme_starry_night"},
+        {"character_id": "moonlit", "name": "Moonlit", "description": "Silver moonlight illuminates the world", "price": 5.49, "category": "sky_theme", "rarity": "epic", "image_url": "sky_moon", "unlock_level": 7, "product_id": "theme_moonlit"},
+        {"character_id": "gentle_rain", "name": "Gentle Rain", "description": "Soft rain with distant rolling clouds", "price": 5.49, "category": "sky_theme", "rarity": "epic", "image_url": "sky_rain", "unlock_level": 7, "product_id": "theme_gentle_rain"},
         
         # Legendary Sky Themes
-        {"character_id": "aurora_borealis", "name": "Aurora Borealis", "description": "Northern lights dance across the heavens", "price": 7.99, "category": "sky_theme", "rarity": "legendary", "image_url": "sky_aurora", "unlock_level": 9},
-        {"character_id": "celestial_night", "name": "Celestial Night", "description": "Deep space with nebulas and distant galaxies", "price": 8.99, "category": "sky_theme", "rarity": "legendary", "image_url": "sky_celestial", "unlock_level": 10},
-        {"character_id": "cherry_blossom_sky", "name": "Cherry Blossom Sky", "description": "Petals drift through a pink-hued sky", "price": 8.99, "category": "sky_theme", "rarity": "legendary", "image_url": "sky_sakura", "unlock_level": 11},
+        {"character_id": "aurora_borealis", "name": "Aurora Borealis", "description": "Northern lights dance across the heavens", "price": 7.99, "category": "sky_theme", "rarity": "legendary", "image_url": "sky_aurora", "unlock_level": 9, "product_id": "theme_aurora_borealis"},
+        {"character_id": "celestial_night", "name": "Celestial Night", "description": "Deep space with nebulas and distant galaxies", "price": 8.99, "category": "sky_theme", "rarity": "legendary", "image_url": "sky_celestial", "unlock_level": 10, "product_id": "theme_celestial_night"},
+        {"character_id": "cherry_blossom_sky", "name": "Cherry Blossom Sky", "description": "Petals drift through a pink-hued sky", "price": 8.99, "category": "sky_theme", "rarity": "legendary", "image_url": "sky_sakura", "unlock_level": 11, "product_id": "theme_cherry_blossom_sky"},
 
         # ---- Buyable Seasonal Themes ----
-        {"character_id": "spring_bloom", "name": "Spring Bloom", "description": "Pastel petals on a soft mint sky", "price": 3.49, "category": "sky_theme", "rarity": "rare", "image_url": "sky_spring", "unlock_level": 4, "seasonal_collection": True},
-        {"character_id": "summer_heatwave", "name": "Summer Heatwave", "description": "Bright coral horizon with sun haze", "price": 3.49, "category": "sky_theme", "rarity": "rare", "image_url": "sky_summer", "unlock_level": 5, "seasonal_collection": True},
-        {"character_id": "autumn_leaves", "name": "Autumn Leaves", "description": "Amber and burgundy with falling leaves", "price": 5.49, "category": "sky_theme", "rarity": "epic", "image_url": "sky_autumn", "unlock_level": 7, "seasonal_collection": True},
-        {"character_id": "winter_frost", "name": "Winter Frost", "description": "Pale silver with delicate snowflakes", "price": 5.49, "category": "sky_theme", "rarity": "epic", "image_url": "sky_winter", "unlock_level": 7, "seasonal_collection": True},
+        {"character_id": "spring_bloom", "name": "Spring Bloom", "description": "Pastel petals on a soft mint sky", "price": 3.49, "category": "sky_theme", "rarity": "rare", "image_url": "sky_spring", "unlock_level": 4, "product_id": "theme_spring_bloom", "seasonal_collection": True},
+        {"character_id": "summer_heatwave", "name": "Summer Heatwave", "description": "Bright coral horizon with sun haze", "price": 3.49, "category": "sky_theme", "rarity": "rare", "image_url": "sky_summer", "unlock_level": 5, "product_id": "theme_summer_heatwave", "seasonal_collection": True},
+        {"character_id": "autumn_leaves", "name": "Autumn Leaves", "description": "Amber and burgundy with falling leaves", "price": 5.49, "category": "sky_theme", "rarity": "epic", "image_url": "sky_autumn", "unlock_level": 7, "product_id": "theme_autumn_leaves", "seasonal_collection": True},
+        {"character_id": "winter_frost", "name": "Winter Frost", "description": "Pale silver with delicate snowflakes", "price": 5.49, "category": "sky_theme", "rarity": "epic", "image_url": "sky_winter", "unlock_level": 7, "product_id": "theme_winter_frost", "seasonal_collection": True},
 
         # ---- Free Monthly Rotating Themes (hidden from main shop) ----
         # Each is auto-claimable for free during its active season window.

@@ -193,7 +193,7 @@ def test_get_characters(client):
     assert {"kite", "companion", "sky_theme"}.issubset(categories), f"got {categories}"
 
 
-def test_purchase_and_equip_kite(client):
+def test_claim_and_equip_free_kite(client):
     me = client.get(f"{API}/auth/me").json()
     user_id = me["user_id"]
     # Promote user past progressive gates so common kites are buyable
@@ -208,14 +208,15 @@ def test_purchase_and_equip_kite(client):
     kite = next(
         (c for c in chars
          if c["category"] == "kite"
+         and float(c.get("price", 0)) == 0
          and c.get("unlock_level", 1) <= 5
          and c["character_id"] not in owned),
         None,
     )
     if kite is None:
-        pytest.skip("No purchasable kite available after level bump")
+        pytest.skip("No claimable free kite available after level bump")
 
-    pr = client.post(f"{API}/characters/purchase", json={"character_id": kite["character_id"]})
+    pr = client.post(f"{API}/characters/claim", json={"character_id": kite["character_id"]})
     assert pr.status_code < 500, pr.text
 
     eq = client.post(f"{API}/characters/equip", json={"character_id": kite["character_id"], "type": "kite"})
@@ -364,9 +365,9 @@ def test_profile(client):
 
 
 
-# ---------- Stripe Checkout (new) ----------
-def test_purchase_free_sky_theme_grants_directly(client):
-    """Free items (price=0) should be granted directly without Stripe session."""
+# ---------- RevenueCat purchases ----------
+def test_claim_free_sky_theme_grants_directly(client):
+    """Free items (price=0) should be granted directly via /characters/claim."""
     # 'dawn' is price=0 and already owned by default, pick something else that's free.
     chars = client.get(f"{API}/characters").json()
     free = next((c for c in chars if float(c.get("price", 0)) == 0), None)
@@ -374,23 +375,23 @@ def test_purchase_free_sky_theme_grants_directly(client):
     me = client.get(f"{API}/auth/me").json()
     # If already owned, expect 400 already owned.
     if free["character_id"] in me.get("owned_sky_themes", []) + me.get("owned_characters", []):
-        r = client.post(f"{API}/characters/purchase",
+        r = client.post(f"{API}/characters/claim",
                         json={"character_id": free["character_id"]})
         assert r.status_code == 400
         assert "owned" in r.json().get("detail", "").lower()
     else:
-        r = client.post(f"{API}/characters/purchase",
+        r = client.post(f"{API}/characters/claim",
                         json={"character_id": free["character_id"]})
         assert r.status_code == 200, r.text
         body = r.json()
         assert body.get("free") is True and body.get("granted") is True
 
 
-def test_purchase_paid_item_returns_session_url(client):
-    """Paid items should return Stripe session_id + url, and create a payment_transactions row."""
+def test_claim_rejects_paid_item(client):
+    """/characters/claim must refuse items that require payment — those go
+    through /characters/purchase/sync instead."""
     me = client.get(f"{API}/auth/me").json()
     user_id = me["user_id"]
-    # Promote past gates
     import os
     from pymongo import MongoClient
     mc = MongoClient(os.environ.get("MONGO_URL"))
@@ -411,36 +412,85 @@ def test_purchase_paid_item_returns_session_url(client):
     if paid is None:
         pytest.skip("No purchasable paid item")
 
-    r = client.post(
-        f"{API}/characters/purchase",
-        json={"character_id": paid["character_id"],
-              "origin_url": "https://example.com"},
+    r = client.post(f"{API}/characters/claim", json={"character_id": paid["character_id"]})
+    assert r.status_code == 400, r.text
+    assert "payment" in r.json().get("detail", "").lower()
+
+
+def test_purchase_sync_rejects_product_id_mismatch(client):
+    """/characters/purchase/sync must reject a product_id that doesn't match
+    the character's configured store product, before ever calling out to
+    RevenueCat."""
+    chars = client.get(f"{API}/characters").json()
+    paid = next((c for c in chars if float(c.get("price", 0)) > 0), None)
+    if paid is None:
+        pytest.skip("No paid item in catalog")
+
+    r = client.post(f"{API}/characters/purchase/sync", json={
+        "character_id": paid["character_id"],
+        "product_id": "not_the_real_product_id",
+        "transaction_id": "txn_fake",
+    })
+    assert r.status_code in (400, 404), r.text
+
+
+def test_purchase_sync_unverified_transaction_not_granted(client):
+    """A syntactically valid sync payload whose transaction RevenueCat has
+    never seen must not grant the item — either because verification runs
+    and finds nothing (`not_yet_visible`), or because REVENUECAT_SECRET_API_KEY
+    isn't configured in this environment (500, documented limitation)."""
+    me = client.get(f"{API}/auth/me").json()
+    user_id = me["user_id"]
+    import os
+    from pymongo import MongoClient
+    mc = MongoClient(os.environ.get("MONGO_URL"))
+    db = mc[os.environ.get("DB_NAME", "test_database")]
+
+    chars = client.get(f"{API}/characters").json()
+    owned = set(me.get("owned_characters", []) +
+                me.get("owned_companions", []) +
+                me.get("owned_sky_themes", []))
+    paid = next(
+        (c for c in chars if float(c.get("price", 0)) > 0
+         and c["character_id"] not in owned),
+        None,
     )
-    # If Stripe key invalid in test env, accept 500 as documented limitation, but record it.
-    if r.status_code == 500:
-        pytest.skip(f"Stripe session creation failed (likely test key): {r.text}")
-    assert r.status_code == 200, r.text
-    body = r.json()
-    assert "session_id" in body and isinstance(body["session_id"], str)
-    assert "url" in body and body["url"].startswith("http")
-    assert "amount" in body and float(body["amount"]) == float(paid["price"])
+    if paid is None:
+        pytest.skip("No purchasable paid item")
 
-    # Status poll on the freshly-created session — should not 404
-    sid = body["session_id"]
-    s = client.get(f"{API}/payments/checkout/status/{sid}")
-    assert s.status_code == 200, s.text
-    sbody = s.json()
-    assert "payment_status" in sbody
-    assert "status" in sbody
-    assert "granted" in sbody
-    assert sbody["character_id"] == paid["character_id"]
-    # Not paid yet (we never went through Stripe's hosted UI)
-    assert sbody["granted"] is False
+    test_product_id = f"test_product_{paid['character_id']}"
+    db.characters.update_one(
+        {"character_id": paid["character_id"]},
+        {"$set": {"product_id": test_product_id}},
+    )
+    try:
+        r = client.post(f"{API}/characters/purchase/sync", json={
+            "character_id": paid["character_id"],
+            "product_id": test_product_id,
+            "transaction_id": "txn_never_happened",
+        })
+        if r.status_code == 500:
+            pytest.skip(f"RevenueCat verification not configured in this env: {r.text}")
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body.get("ok") is False
+        assert body.get("granted") is False
+
+        me2 = client.get(f"{API}/auth/me").json()
+        assert paid["character_id"] not in (
+            me2.get("owned_characters", []) + me2.get("owned_companions", []) + me2.get("owned_sky_themes", [])
+        )
+    finally:
+        db.characters.update_one(
+            {"character_id": paid["character_id"]},
+            {"$set": {"product_id": None}},
+        )
 
 
-def test_checkout_status_nonexistent_returns_404(client):
-    r = client.get(f"{API}/payments/checkout/status/cs_test_does_not_exist_xyz_123")
-    assert r.status_code == 404
+def test_old_stripe_purchase_endpoint_removed(client):
+    """The old Stripe checkout-session endpoint should no longer exist."""
+    r = client.post(f"{API}/characters/purchase", json={"character_id": "rainbow_kite"})
+    assert r.status_code in (404, 405), f"expected 404/405, got {r.status_code}: {r.text}"
 
 
 def test_old_cashapp_endpoint_removed(client):
@@ -450,15 +500,70 @@ def test_old_cashapp_endpoint_removed(client):
     assert r.status_code in (404, 405), f"expected 404/405, got {r.status_code}: {r.text}"
 
 
-def test_stripe_webhook_endpoint_exists():
-    """Webhook endpoint should exist and reject invalid signatures with 400 (not 404)."""
+def test_checkout_status_endpoint_removed():
+    r = requests.get(f"{API}/payments/checkout/status/cs_test_does_not_exist_xyz_123")
+    assert r.status_code in (404, 405), f"expected 404/405, got {r.status_code}: {r.text}"
+
+
+def test_stripe_webhook_endpoint_removed():
     r = requests.post(f"{API}/webhook/stripe",
                       data=b"{}",
                       headers={"Stripe-Signature": "invalid",
                                "Content-Type": "application/json"})
-    # Endpoint exists -> not 404/405. Invalid sig -> 400 (per handler). Some integrations may 500.
-    assert r.status_code not in (404, 405), f"webhook missing: {r.status_code}"
-    assert r.status_code in (400, 401, 422, 500), f"unexpected: {r.status_code} {r.text}"
+    assert r.status_code in (404, 405), f"expected 404/405, got {r.status_code}: {r.text}"
+
+
+def test_premium_webhook_grants_non_renewing_purchase_and_is_idempotent(client):
+    """RevenueCat webhook NON_RENEWING_PURCHASE events are the authoritative,
+    idempotent grant path — same purchase_transactions dedupe key that
+    /characters/purchase/sync uses."""
+    me = client.get(f"{API}/auth/me").json()
+    user_id = me["user_id"]
+    import os
+    from pymongo import MongoClient
+    mc = MongoClient(os.environ.get("MONGO_URL"))
+    db = mc[os.environ.get("DB_NAME", "test_database")]
+
+    chars = client.get(f"{API}/characters").json()
+    owned = set(me.get("owned_characters", []) +
+                me.get("owned_companions", []) +
+                me.get("owned_sky_themes", []))
+    item = next((c for c in chars if c["character_id"] not in owned), None)
+    if item is None:
+        pytest.skip("No unowned item to grant")
+
+    test_product_id = f"test_webhook_product_{item['character_id']}"
+    transaction_id = f"test_webhook_txn_{item['character_id']}"
+    db.characters.update_one(
+        {"character_id": item["character_id"]},
+        {"$set": {"product_id": test_product_id}},
+    )
+    try:
+        payload = {"event": {
+            "type": "NON_RENEWING_PURCHASE",
+            "app_user_id": user_id,
+            "product_id": test_product_id,
+            "id": transaction_id,
+        }}
+        r1 = requests.post(f"{API}/premium/webhook", json=payload)
+        assert r1.status_code == 200, r1.text
+
+        me2 = client.get(f"{API}/auth/me").json()
+        owned2 = set(me2.get("owned_characters", []) +
+                     me2.get("owned_companions", []) +
+                     me2.get("owned_sky_themes", []))
+        assert item["character_id"] in owned2
+
+        # Redelivery of the same event must not double-grant.
+        r2 = requests.post(f"{API}/premium/webhook", json=payload)
+        assert r2.status_code == 200, r2.text
+        grant_count = db.purchase_transactions.count_documents({"transaction_id": transaction_id})
+        assert grant_count == 1
+    finally:
+        db.characters.update_one(
+            {"character_id": item["character_id"]},
+            {"$set": {"product_id": None}},
+        )
 
 
 
@@ -592,99 +697,6 @@ def test_session_exchange_endpoint_uses_samesite_none_in_source():
     assert 'samesite="lax"' not in src.lower().replace("'", '"'), (
         "samesite=\"lax\" must not remain in server.py (breaks native iOS auth)"
     )
-
-
-# --- iter 10: SECURITY FIX 2 — Open-Redirect defense (_resolve_safe_origin) -----
-import sys as _sys
-_sys.path.insert(0, "/app/backend")
-
-
-def _make_fake_request(base_url="https://kite-trivia-quest.preview.emergentagent.com/"):
-    import types
-    return types.SimpleNamespace(base_url=base_url)
-
-
-def test_resolve_safe_origin_blocks_evil():
-    from server import _resolve_safe_origin
-    r = _make_fake_request()
-    out = _resolve_safe_origin("https://evil.example.com", r)
-    assert "evil.example.com" not in out, f"evil origin leaked: {out}"
-    assert out == "https://kite-trivia-quest.preview.emergentagent.com"
-
-
-def test_resolve_safe_origin_allows_configured():
-    from server import _resolve_safe_origin
-    r = _make_fake_request()
-    legit = "https://kite-trivia-quest.preview.emergentagent.com"
-    out = _resolve_safe_origin(legit, r)
-    assert out == legit
-
-
-def test_resolve_safe_origin_allows_regex_preview():
-    from server import _resolve_safe_origin
-    r = _make_fake_request()
-    origin = "https://some-other.preview.emergentagent.com"
-    out = _resolve_safe_origin(origin, r)
-    assert out == origin
-
-
-def test_resolve_safe_origin_rejects_dangerous_schemes():
-    from server import _resolve_safe_origin
-    r = _make_fake_request()
-    fallback = "https://kite-trivia-quest.preview.emergentagent.com"
-    for bad in ["javascript:alert(1)", "//evil.example.com", "ftp://evil.example.com",
-                "data:text/html,<script>alert(1)</script>", "", None]:
-        out = _resolve_safe_origin(bad, r)
-        assert out == fallback, f"bad candidate {bad!r} did not fall back: {out}"
-
-
-def test_resolve_safe_origin_rejects_suffix_attack():
-    from server import _resolve_safe_origin
-    r = _make_fake_request()
-    # domain that CONTAINS the legit suffix but is not the legit domain
-    out = _resolve_safe_origin("https://kite-trivia-quest.preview.emergentagent.com.attacker.com", r)
-    assert "attacker.com" not in out, f"suffix attack leaked: {out}"
-    assert out == "https://kite-trivia-quest.preview.emergentagent.com"
-
-
-def test_purchase_with_evil_origin_url_does_not_reflect_it(client):
-    """POST /api/characters/purchase with origin_url=evil must not surface evil.example.com
-    in the response body. For a free item that grants directly, no URL is returned at all.
-    For a paid item, the returned Stripe url is checkout.stripe.com (evil origin cannot appear
-    in the top-level `url` field). This is a lightweight end-to-end guarantee."""
-    # find any free item the level-1 user qualifies for
-    r = client.get(f"{API}/characters")
-    assert r.status_code == 200
-    chars = r.json()
-    free_items = [c for c in chars if float(c.get("price", 0)) == 0
-                  and int(c.get("unlock_level", 1)) <= 1
-                  and c.get("character_id") not in (
-                      # exclude default starters that user already owns
-                      "basic_kite", "cloud_companion", "dawn_sky",
-                  )]
-    # if none, pick a paid item at level<=1 (backend will still return url or 403)
-    target = None
-    if free_items:
-        target = free_items[0]
-    else:
-        for c in chars:
-            if int(c.get("unlock_level", 1)) <= 1 and float(c.get("price", 0)) > 0:
-                target = c
-                break
-    if not target:
-        pytest.skip("no purchasable item found for level-1 user")
-
-    r2 = client.post(f"{API}/characters/purchase",
-                     json={"character_id": target["character_id"],
-                           "origin_url": "https://evil.example.com"})
-    # Response must not reflect evil.example.com anywhere in the body
-    body_text = r2.text.lower()
-    assert "evil.example.com" not in body_text, (
-        f"Open redirect regression: response leaked evil.example.com — {r2.status_code} {r2.text}"
-    )
-    # And status is 200 (free grant) or 200 with url (paid) or 400/403 for owned/level.
-    assert r2.status_code in (200, 400, 403), f"unexpected status: {r2.status_code} {r2.text}"
-
 
 
 # ---------- Premium / Paywall ----------

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { ArrowLeft, Heart, Palette, Wind } from "lucide-react";
 import { toast } from "sonner";
@@ -9,11 +9,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs"
 import { useAuth, API, LoadingKite } from "../App";
 import { AtmosphericBackground } from "../components/Atmosphere";
 import { AudioControl } from "../components/AudioControl";
+import { getStoreProducts, purchaseProduct } from "../lib/purchases";
 
 import { EquippedSummary } from "./shop/EquippedSummary";
 import { PurchaseDialog } from "./shop/PurchaseDialog";
 import { ShopTabContent } from "./shop/ShopTabContent";
-import { useStripeCheckoutPolling } from "./shop/useStripeCheckoutPolling";
 
 const TAB_TRIGGERS = [
   { value: "kites", label: "Kites", Icon: Wind },
@@ -23,13 +23,14 @@ const TAB_TRIGGERS = [
 
 export default function ShopPage() {
   const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
   const { user, refreshUser } = useAuth();
 
   const [characters, setCharacters] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("kites");
   const [purchaseInfo, setPurchaseInfo] = useState(null);
+  const [purchaseDialog, setPurchaseDialog] = useState(false);
+  const [paymentStatus, setPaymentStatus] = useState(null);
 
   const loadCharacters = useCallback(async () => {
     try {
@@ -44,11 +45,6 @@ export default function ShopPage() {
   }, []);
 
   useEffect(() => { loadCharacters(); }, [loadCharacters]);
-
-  const {
-    purchaseDialog, setPurchaseDialog,
-    paymentStatus, setPaymentStatus,
-  } = useStripeCheckoutPolling({ searchParams, setSearchParams, refreshUser, loadCharacters });
 
   const itemsByCategory = useMemo(() => ({
     kites:      characters.filter(c => c.category === "kite"),
@@ -84,30 +80,71 @@ export default function ShopPage() {
     setPaymentStatus("polling");
 
     try {
-      const { data } = await axios.post(
-        `${API}/characters/purchase`,
-        { character_id: character.character_id, origin_url: window.location.origin },
-        { withCredentials: true }
-      );
-      if (data.free && data.granted) {
-        toast.success("Unlocked!");
-        await refreshUser();
-        await loadCharacters();
+      if (Number(character.price) <= 0) {
+        const { data } = await axios.post(
+          `${API}/characters/claim`,
+          { character_id: character.character_id },
+          { withCredentials: true }
+        );
+        if (data.free && data.granted) {
+          toast.success("Unlocked!");
+          await refreshUser();
+          await loadCharacters();
+          setPurchaseDialog(false);
+          setPaymentStatus(null);
+        }
+        return;
+      }
+
+      if (!character.product_id) {
+        throw new Error("This item isn't available for purchase yet");
+      }
+
+      const { ok: productsOk, products, reason: productsReason } =
+        await getStoreProducts([character.product_id]);
+      const product = products?.[character.product_id];
+      if (!productsOk || !product) {
+        throw new Error(productsReason === "unavailable"
+          ? "Available on iOS and Android"
+          : "Could not load this item's price right now");
+      }
+
+      const result = await purchaseProduct(product);
+      if (result.canceled) {
         setPurchaseDialog(false);
         setPaymentStatus(null);
         return;
       }
-      if (data.url) {
-        window.location.href = data.url;
-        return;
+      if (!result.ok || !result.transactionId) {
+        throw new Error(result.error || "Purchase couldn't complete");
       }
-      throw new Error("Could not start checkout");
+
+      const { data: syncData } = await axios.post(
+        `${API}/characters/purchase/sync`,
+        {
+          character_id: character.character_id,
+          product_id: character.product_id,
+          transaction_id: result.transactionId,
+        },
+        { withCredentials: true }
+      );
+      if (!syncData.ok || !syncData.granted) {
+        throw new Error("Purchase is still processing. Check back in a moment.");
+      }
+
+      setPaymentStatus("paid");
+      toast.success("Item unlocked — welcome to your new sky!");
+      await refreshUser();
+      await loadCharacters();
+      setTimeout(() => {
+        setPurchaseDialog(false);
+        setPaymentStatus(null);
+      }, 1800);
     } catch (error) {
-      setPurchaseDialog(false);
-      setPaymentStatus(null);
-      toast.error(error.response?.data?.detail || "Failed to start purchase");
+      setPaymentStatus("failed");
+      toast.error(error.response?.data?.detail || error.message || "Failed to complete purchase");
     }
-  }, [user?.level, refreshUser, loadCharacters, setPurchaseDialog, setPaymentStatus]);
+  }, [user?.level, refreshUser, loadCharacters]);
 
   const closePurchaseDialog = useCallback(() => {
     setPurchaseDialog(false);

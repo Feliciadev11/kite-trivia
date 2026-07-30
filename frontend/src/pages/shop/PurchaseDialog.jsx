@@ -9,9 +9,9 @@ import { KiteCharacter, CompanionCharacter } from "../../components/KiteCharacte
 import { SkyThemeSwatch } from "../../components/SkyThemeSwatch";
 
 /**
- * Stripe Checkout status dialog. Lives outside the page render to keep the
- * Shop page lean. Close is disabled while polling so the user can't dismiss
- * mid-payment.
+ * RevenueCat purchase status dialog. Lives outside the page render to keep
+ * the Shop page lean. Close is disabled while a purchase is in flight so the
+ * user can't dismiss mid-payment.
  */
 const PurchasePreview = ({ character }) => {
   if (!character) return null;
@@ -78,12 +78,12 @@ export const PurchaseDialog = ({ open, status, character, onClose }) => {
         <DialogHeader>
           <DialogTitle className="text-sky-900 flex items-center gap-2">
             <CreditCard className="w-5 h-5 text-sky-500" />
-            {status === "paid" ? "Your sky is yours" : "Preparing secure checkout"}
+            {status === "paid" ? "Your sky is yours" : "Confirm on your device"}
           </DialogTitle>
           <DialogDescription>
             {status === "paid"
               ? "We've added this to your collection."
-              : "Apple Pay, Google Pay, Visa, and Mastercard accepted."}
+              : "Complete the purchase using your App Store or Google Play payment method."}
           </DialogDescription>
         </DialogHeader>
 
