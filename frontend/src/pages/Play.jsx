@@ -5,6 +5,8 @@ import axios from "axios";
 import { Button } from "../components/ui/button";
 import { Progress } from "../components/ui/progress";
 import { useAuth, API, LoadingKite } from "../App";
+import { AtmosphericBackground } from "../components/Atmosphere";
+import { KiteCharacter, CompanionCharacter } from "../components/KiteCharacter";
 import { useAudio } from "../contexts/AudioContext";
 import { toast } from "sonner";
 import { ArrowLeft, ArrowRight, CheckCircle, XCircle, Sparkles, Home } from "lucide-react";
@@ -262,7 +264,8 @@ export default function PlayPage() {
   }
 
   return (
-    <div className="min-h-screen sky-gradient" data-testid="play-page">
+    <div className="min-h-screen sky-gradient relative" data-testid="play-page">
+      <AtmosphericBackground theme={user?.current_sky_theme || 'dawn'} />
       {milestones && (
         <SkyWandererCelebration
           milestones={milestones}
@@ -270,7 +273,7 @@ export default function PlayPage() {
         />
       )}
       {/* Header */}
-      <header className="bg-white/80 backdrop-blur-md border-b border-white/50 sticky top-0 z-50">
+      <header className="bg-white/80 backdrop-blur-md border-b border-white/50 sticky top-0 z-50 relative">
         <div className="container mx-auto px-4 py-3 flex items-center justify-between">
           <Button
             variant="ghost"
@@ -295,7 +298,13 @@ export default function PlayPage() {
       </header>
 
       {/* Question Card */}
-      <main className="container mx-auto px-4 py-8 max-w-2xl">
+      <main className="container mx-auto px-4 py-8 max-w-2xl relative z-10">
+        <div className="flex justify-center items-end gap-2 mb-6">
+          <KiteCharacter characterId={user?.current_character || 'basic_kite'} size="small" />
+          {user?.current_companion && (
+            <CompanionCharacter companionId={user.current_companion} size="tiny" />
+          )}
+        </div>
         <AnimatePresence mode="wait">
           <motion.div
             key={currentIndex}

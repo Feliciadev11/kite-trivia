@@ -425,19 +425,26 @@ def _verify_code(code: str, hashed: str) -> bool:
 
 @api_router.post("/auth/forgot-password")
 async def forgot_password(payload: ForgotPasswordRequest):
-    """Generate a 6-digit reset code. To avoid user enumeration, always return a
-    generic success message — but only include the actual code when the email is
-    registered (the frontend handles either case identically and only renders the
-    code if present in the response)."""
+    """Generate a 6-digit reset code. To avoid user enumeration, always return the
+    same generic response regardless of whether the email is registered.
+
+    SECURITY: the code is intentionally NEVER returned in this response. There is
+    no email/SMS provider wired up yet (no SMTP/SES credentials configured), so
+    until one exists, self-serve reset is effectively unavailable — a generated
+    code is logged server-side (see below) so support can hand it to a verified
+    user out-of-band. Returning the code directly to the caller, as this endpoint
+    used to do, let anyone who merely knew a target's email take over their
+    account with no proof of email ownership at all. Do not restore that
+    behavior — wire up real email/SMS delivery instead.
+    """
     email = payload.email.lower().strip()
     now = datetime.now(timezone.utc)
 
     user_doc = await db.users.find_one({"email": email}, {"_id": 0, "user_id": 1})
 
-    # Generic response shape regardless of outcome
+    # Generic response shape regardless of outcome — never carries the code.
     generic = {
-        "message": "If that email is registered, a reset code has been generated below.",
-        "code": None,
+        "message": "If that email is registered, a reset code has been generated.",
         "expires_in_seconds": RESET_CODE_TTL_SECONDS,
     }
 
@@ -469,11 +476,13 @@ async def forgot_password(payload: ForgotPasswordRequest):
         "expires_at": expires_at.isoformat(),
     })
 
-    return {
-        "message": "Reset code generated. Use it within 15 minutes.",
-        "code": code,
-        "expires_in_seconds": RESET_CODE_TTL_SECONDS,
-    }
+    # STOPGAP until real email/SMS delivery exists: log the plaintext code so
+    # support can relay it to a verified user out-of-band. This is only safe
+    # to the extent application logs are access-controlled — replace with an
+    # actual email/SMS send as soon as a provider is configured.
+    logger.info(f"[password-reset] support-assisted code for {email}: {code}")
+
+    return generic
 
 @api_router.post("/auth/reset-password")
 async def reset_password(payload: ResetPasswordRequest):
@@ -752,33 +761,52 @@ async def sync_premium(
     payload: PremiumSyncPayload,
     current_user: User = Depends(get_current_user),
 ):
-    """Client (mobile) reports RevenueCat entitlement. We store it on the user
-    doc so the server-side gate can be enforced independently of the SDK.
+    """Client (mobile) pings this after RevenueCat state changes on-device. The
+    payload is a pointer, not proof — we independently verify the entitlement
+    against RevenueCat's REST API before trusting it, mirroring
+    /characters/purchase/sync. `payload.entitlement_active` is intentionally
+    never trusted for authorization; is_premium, premium_expires_at, and
+    premium_product_id are derived solely from RevenueCat's response.
     """
+    secret_key = os.environ.get("REVENUECAT_SECRET_API_KEY")
+    if not secret_key:
+        raise HTTPException(status_code=500, detail="Purchase verification not configured")
+
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        resp = await client.get(
+            f"{REVENUECAT_API_BASE}/subscribers/{current_user.user_id}",
+            headers={"Authorization": f"Bearer {secret_key}"},
+        )
+    if resp.status_code != 200:
+        raise HTTPException(status_code=502, detail="Could not reach RevenueCat")
+
+    subscriber = resp.json().get("subscriber", {})
+    entitlement = (subscriber.get("entitlements", {}) or {}).get(PREMIUM_ENTITLEMENT_ID)
+
+    is_active = False
+    expires_at = None
+    product_id = None
+    if entitlement:
+        expires_at = entitlement.get("expires_date")
+        product_id = entitlement.get("product_identifier")
+        if expires_at:
+            try:
+                exp = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
+                is_active = exp > datetime.now(timezone.utc)
+            except (ValueError, TypeError):
+                is_active = False
+        else:
+            is_active = True  # no expiry date = non-expiring (lifetime) entitlement
+
     now_iso = datetime.now(timezone.utc).isoformat()
     update = {
-        "is_premium": bool(payload.entitlement_active),
-        "premium_source": payload.source or ("revenuecat" if payload.entitlement_active else None),
-        "premium_product_id": payload.product_id,
-        "premium_expires_at": payload.expires_at_iso,
+        "is_premium": is_active,
+        "premium_source": "revenuecat" if is_active else None,
+        "premium_product_id": product_id if is_active else None,
+        "premium_expires_at": expires_at if is_active else None,
         "premium_updated_at": now_iso,
     }
     await db.users.update_one({"user_id": current_user.user_id}, {"$set": update})
-    # If newly premium, also grant every catalog item for a smooth "all unlocked"
-    # experience on mobile (per product decision 5c). This is idempotent.
-    if payload.entitlement_active:
-        catalog = await db.characters.find({}, {"_id": 0}).to_list(1000)
-        kite_ids = [c["character_id"] for c in catalog if c["category"] == "kite"]
-        companion_ids = [c["character_id"] for c in catalog if c["category"] == "companion"]
-        sky_ids = [c["character_id"] for c in catalog if c["category"] == "sky_theme"]
-        await db.users.update_one(
-            {"user_id": current_user.user_id},
-            {"$addToSet": {
-                "owned_characters": {"$each": kite_ids},
-                "owned_companions": {"$each": companion_ids},
-                "owned_sky_themes": {"$each": sky_ids},
-            }},
-        )
     return await get_premium_status(current_user=User(**{**current_user.model_dump(), **update}))
 
 
