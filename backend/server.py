@@ -1538,6 +1538,14 @@ async def health():
 # Include the router in the main app
 app.include_router(api_router)
 
+# Kubernetes readiness/liveness probe — the platform hits GET /health at the
+# service root (not /api/health). Without this, the probe returns 404, the new
+# pod never becomes Ready, and the deployment rolls back to the previous
+# image. Same {status:healthy} shape as the /api/health endpoint above.
+@app.get("/health")
+async def root_health():
+    return {"status": "healthy"}
+
 # CORS: never combine "*" with allow_credentials=True (CWE-942).
 # When credentials are enabled, browsers require an explicit origin in
 # Access-Control-Allow-Origin. We honour CORS_ORIGINS as a comma-separated
