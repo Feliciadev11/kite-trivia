@@ -14,9 +14,10 @@ import { RARITY_GATES, RARITY_ORDER, sortByRarity, TAB_CONFIG } from "./shopCons
  *   user: object,
  *   onEquip: (characterId: string, type: string) => void,
  *   onPurchase: (item: object) => void,
+ *   isPremium: boolean,
  * }} props
  */
-export const ShopTabContent = ({ tabKey, items, user, onEquip, onPurchase }) => {
+export const ShopTabContent = ({ tabKey, items, user, onEquip, onPurchase, isPremium }) => {
   const cfg = TAB_CONFIG[tabKey];
   const userLevel = user?.level || 1;
   const ownedList = user?.[cfg.ownedKey] || [];
@@ -60,6 +61,7 @@ export const ShopTabContent = ({ tabKey, items, user, onEquip, onPurchase }) => 
                     onPurchase={() => onPurchase(item)}
                     index={index}
                     type={cfg.category}
+                    isPremium={isPremium}
                   />
                 ))}
               </div>

@@ -31,6 +31,7 @@ export default function ShopPage() {
   const [purchaseInfo, setPurchaseInfo] = useState(null);
   const [purchaseDialog, setPurchaseDialog] = useState(false);
   const [paymentStatus, setPaymentStatus] = useState(null);
+  const [isPremium, setIsPremium] = useState(false);
 
   const loadCharacters = useCallback(async () => {
     try {
@@ -44,7 +45,17 @@ export default function ShopPage() {
     }
   }, []);
 
-  useEffect(() => { loadCharacters(); }, [loadCharacters]);
+  useEffect(() => {
+    loadCharacters();
+    (async () => {
+      try {
+        const response = await axios.get(`${API}/premium/status`, { withCredentials: true });
+        setIsPremium(!!response.data?.is_premium);
+      } catch {
+        // leave isPremium false
+      }
+    })();
+  }, [loadCharacters]);
 
   const itemsByCategory = useMemo(() => ({
     kites:      characters.filter(c => c.category === "kite"),
@@ -208,6 +219,7 @@ export default function ShopPage() {
                 user={user}
                 onEquip={handleEquip}
                 onPurchase={handlePurchase}
+                isPremium={isPremium}
               />
             </TabsContent>
           ))}

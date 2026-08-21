@@ -103,10 +103,11 @@ const ItemAction = ({ equipped, owned, locked, isFree, rarity, onEquip, onPurcha
  *   onPurchase: () => void,
  *   index: number,
  *   type: 'kite' | 'companion' | 'sky_theme',
+ *   isPremium: boolean,
  * }} props
  */
-export const ItemCard = ({ item, owned, equipped, userLevel, onEquip, onPurchase, index, type }) => {
-  const locked = item.unlock_level > userLevel;
+export const ItemCard = ({ item, owned, equipped, userLevel, onEquip, onPurchase, index, type, isPremium }) => {
+  const locked = item.unlock_level > userLevel && !isPremium;
   const isFree = item.price === 0;
   const rarity = RARITY_COLORS[item.rarity] || RARITY_COLORS.common;
 
