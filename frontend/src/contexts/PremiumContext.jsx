@@ -41,7 +41,7 @@ const initialStatus = {
 };
 
 export function PremiumProvider({ children }) {
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const [status, setStatus] = useState(initialStatus);
   const [loading, setLoading] = useState(true);
   const [purchasing, setPurchasing] = useState(false);
@@ -140,6 +140,59 @@ export function PremiumProvider({ children }) {
     }
   }, [servicesAvailable, offerings, _pushEntitlementToServer]);
 
+  // -------- Restore one-time cosmetic purchases (kites/companions/skies) --------
+  // rcRestore()'s entitlement handling above only covers the Premium
+  // subscription. RevenueCat's restore result also carries the account's
+  // one-time purchase history (customerInfo.nonSubscriptionTransactions),
+  // which was previously discarded - meaning a reinstall/new-device restore
+  // never re-granted a cosmetic item if the original purchase/sync call had
+  // failed and the /premium/webhook backstop never fired either. Re-sync
+  // each restored transaction through the same /characters/purchase/sync
+  // endpoint the normal purchase flow uses (Shop.jsx) - it independently
+  // re-verifies against RevenueCat server-side, so this can't grant
+  // anything that wasn't a real purchase on this RevenueCat account.
+  const _syncRestoredItemPurchases = useCallback(async (customerInfo) => {
+    const transactions = customerInfo?.nonSubscriptionTransactions || [];
+    if (transactions.length === 0) return { restoredItemCount: 0 };
+
+    try {
+      const { data: characters } = await axios.get(`${API}/characters`, { withCredentials: true });
+      const catalog = Array.isArray(characters) ? characters : characters?.characters || [];
+      const owned = new Set([
+        ...(user?.owned_characters || []),
+        ...(user?.owned_companions || []),
+        ...(user?.owned_sky_themes || []),
+      ]);
+
+      let restoredItemCount = 0;
+      for (const txn of transactions) {
+        const character = catalog.find((c) => c.product_id === txn.productIdentifier);
+        if (!character || owned.has(character.character_id)) continue;
+        try {
+          const { data } = await axios.post(
+            `${API}/characters/purchase/sync`,
+            {
+              character_id: character.character_id,
+              product_id: character.product_id,
+              transaction_id: txn.transactionIdentifier,
+            },
+            { withCredentials: true }
+          );
+          if (data?.ok && data?.granted) {
+            owned.add(character.character_id);
+            restoredItemCount += 1;
+          }
+        } catch (e) {
+          logError("restore: purchase/sync failed for restored transaction", e);
+        }
+      }
+      return { restoredItemCount };
+    } catch (e) {
+      logError("restore: failed to load catalog for item restore", e);
+      return { restoredItemCount: 0 };
+    }
+  }, [user]);
+
   // -------- Restore --------
   const restore = useCallback(async () => {
     if (!servicesAvailable) {
@@ -150,13 +203,15 @@ export function PremiumProvider({ children }) {
       const result = await rcRestore();
       if (result.ok) {
         await _pushEntitlementToServer(result);
-        return { ok: true, entitlementActive: result.entitlementActive };
+        const { restoredItemCount } = await _syncRestoredItemPurchases(result.customerInfo);
+        if (restoredItemCount > 0) await refreshUser();
+        return { ok: true, entitlementActive: result.entitlementActive, restoredItemCount };
       }
       return { ok: false, message: "We couldn't restore your purchases. Please try again." };
     } finally {
       setRestoring(false);
     }
-  }, [servicesAvailable, _pushEntitlementToServer]);
+  }, [servicesAvailable, _pushEntitlementToServer, _syncRestoredItemPurchases, refreshUser]);
 
   const openPaywall = useCallback(() => setPaywallOpen(true), []);
   const closePaywall = useCallback(() => setPaywallOpen(false), []);

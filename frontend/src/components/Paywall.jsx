@@ -51,9 +51,18 @@ export const Paywall = () => {
 
   const handleRestore = async () => {
     const result = await restore();
+    const itemCount = result.restoredItemCount || 0;
     if (result.ok && result.entitlementActive) {
-      toast.success("Purchases restored — you're all set.");
+      toast.success(
+        itemCount > 0
+          ? `Purchases restored — you're all set, plus ${itemCount} item${itemCount === 1 ? "" : "s"} restored.`
+          : "Purchases restored — you're all set."
+      );
       closePaywall();
+      return;
+    }
+    if (result.ok && itemCount > 0) {
+      toast.success(`Restored ${itemCount} item${itemCount === 1 ? "" : "s"} from your previous purchases.`);
       return;
     }
     if (result.ok) {

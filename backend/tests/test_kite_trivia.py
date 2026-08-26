@@ -28,15 +28,29 @@ def client(session_user):
     s.headers.update({"Content-Type": "application/json"})
     r = s.post(f"{API}/auth/register", json=session_user)
     assert r.status_code == 200, f"register failed: {r.status_code} {r.text}"
+    user_id = s.get(f"{API}/auth/me").json()["user_id"]
+
     # Mark the test user as premium so gameplay tests aren't blocked by the
-    # free-tier 3-rounds/day gate. This mirrors what the mobile client posts
-    # after RevenueCat reports the user owns the `kite_premium` entitlement.
-    sync = s.post(f"{API}/premium/sync", json={
-        "entitlement_active": True,
-        "product_id": "kite_premium_test",
-        "source": "pytest",
-    })
-    assert sync.status_code == 200, f"premium sync failed: {sync.status_code} {sync.text}"
+    # free-tier 3-rounds/day gate. /api/premium/sync independently verifies
+    # against RevenueCat's REST API and ignores client-claimed entitlement
+    # state (see sync_premium in server.py) - it can't be used to fake
+    # premium for a test account that never made a real purchase. Seed the
+    # DB directly instead, the same way other tests in this file seed state
+    # the API doesn't expose (see test_reset_password_*, test_purchase_sync_*).
+    from pymongo import MongoClient
+    mc = MongoClient(os.environ.get("MONGO_URL"))
+    db = mc[os.environ.get("DB_NAME", "test_database")]
+    db.users.update_one(
+        {"user_id": user_id},
+        {"$set": {
+            "is_premium": True,
+            "premium_source": "pytest_seed",
+            "premium_product_id": "kite_premium_test",
+            "premium_expires_at": None,
+        }},
+    )
+    status = s.get(f"{API}/premium/status").json()
+    assert status.get("is_premium") is True, f"premium seed did not take effect: {status}"
     return s
 
 
@@ -417,6 +431,125 @@ def test_claim_rejects_paid_item(client):
     assert "payment" in r.json().get("detail", "").lower()
 
 
+def _category_to_equip_type(category):
+    return {"companion": "companion", "sky_theme": "sky_theme"}.get(category, "kite")
+
+
+def _grant_purchased_item_via_webhook(user_id, nonce_suffix=""):
+    """Grant a paid catalog item to user_id the same way a real RevenueCat
+    purchase would (via the authoritative /premium/webhook NON_RENEWING_PURCHASE
+    path), bypassing the need for a real store transaction. Returns the granted
+    character dict, or None if there's no purchasable item in the catalog."""
+    webhook_secret = os.environ.get("REVENUECAT_WEBHOOK_SECRET")
+    if not webhook_secret:
+        return None, "no_webhook_secret"
+
+    r = requests.get(f"{API}/characters")
+    chars = r.json()
+    paid = next((c for c in chars if float(c.get("price", 0)) > 0), None)
+    if paid is None:
+        return None, "no_paid_item"
+
+    from pymongo import MongoClient
+    mc = MongoClient(os.environ.get("MONGO_URL"))
+    db = mc[os.environ.get("DB_NAME", "test_database")]
+    nonce = f"{int(time.time() * 1000)}{nonce_suffix}"
+    product_id = f"test_ownership_product_{paid['character_id']}_{nonce}"
+    transaction_id = f"test_ownership_txn_{paid['character_id']}_{nonce}"
+    db.characters.update_one({"character_id": paid["character_id"]}, {"$set": {"product_id": product_id}})
+
+    payload = {"event": {
+        "type": "NON_RENEWING_PURCHASE",
+        "app_user_id": user_id,
+        "product_id": product_id,
+        "id": transaction_id,
+    }}
+    resp = requests.post(
+        f"{API}/premium/webhook", json=payload,
+        headers={"Authorization": f"Bearer {webhook_secret}"},
+    )
+    if resp.status_code != 200:
+        return None, f"webhook_failed_{resp.status_code}"
+    return paid, None
+
+
+def test_purchased_item_ownership_persists_across_logout_and_new_login_session():
+    """Ownership must be tied to the account (DB), not the session/cookie/device -
+    a purchased item should survive logout and come back on a brand-new login
+    session (no cookie carried over), the same way a reinstall/new-device
+    login would see it."""
+    ts = int(time.time() * 1000)
+    email = f"TEST_persist_{ts}@example.com"
+    password = "DreamySky123!"
+
+    s1 = requests.Session()
+    s1.headers.update({"Content-Type": "application/json"})
+    r = s1.post(f"{API}/auth/register", json={"email": email, "password": password, "name": "Persist"})
+    assert r.status_code == 200, r.text
+    user_id = s1.get(f"{API}/auth/me").json()["user_id"]
+
+    item, skip_reason = _grant_purchased_item_via_webhook(user_id, "_persist")
+    if item is None:
+        pytest.skip(f"Could not set up a purchased item for this test: {skip_reason}")
+
+    equip_type = _category_to_equip_type(item.get("category", "kite"))
+    eq = s1.post(f"{API}/characters/equip", json={"character_id": item["character_id"], "type": equip_type})
+    assert eq.status_code == 200, eq.text
+
+    assert s1.post(f"{API}/auth/logout").status_code == 200
+    assert s1.get(f"{API}/auth/me").status_code in (401, 403)
+
+    # Brand-new session object: no cookie carried over at all, simulating a
+    # fresh login on a new device/reinstall.
+    s2 = requests.Session()
+    s2.headers.update({"Content-Type": "application/json"})
+    login = s2.post(f"{API}/auth/login", json={"email": email, "password": password})
+    assert login.status_code == 200, login.text
+
+    me2 = s2.get(f"{API}/auth/me").json()
+    owned2 = set(me2.get("owned_characters", []) + me2.get("owned_companions", []) + me2.get("owned_sky_themes", []))
+    assert item["character_id"] in owned2, "purchased item did not survive logout + new login session"
+
+    equip_field = {"companion": "current_companion", "sky_theme": "current_sky_theme"}.get(
+        item.get("category", "kite"), "current_character"
+    )
+    assert me2.get(equip_field) == item["character_id"], "equipped state did not survive logout + new login session"
+
+
+def test_purchased_item_ownership_does_not_leak_between_users():
+    """A different user must never see or be able to use an item purchased by
+    someone else's account - ownership must not leak across users."""
+    ts = int(time.time() * 1000)
+
+    a = requests.Session()
+    a.headers.update({"Content-Type": "application/json"})
+    a.post(f"{API}/auth/register", json={
+        "email": f"TEST_leak_a_{ts}@example.com", "password": "DreamySky123!", "name": "A",
+    })
+    user_id_a = a.get(f"{API}/auth/me").json()["user_id"]
+
+    item, skip_reason = _grant_purchased_item_via_webhook(user_id_a, "_leak")
+    if item is None:
+        pytest.skip(f"Could not set up a purchased item for this test: {skip_reason}")
+
+    b = requests.Session()
+    b.headers.update({"Content-Type": "application/json"})
+    b.post(f"{API}/auth/register", json={
+        "email": f"TEST_leak_b_{ts}@example.com", "password": "DreamySky123!", "name": "B",
+    })
+    me_b = b.get(f"{API}/auth/me").json()
+    owned_b = set(me_b.get("owned_characters", []) + me_b.get("owned_companions", []) + me_b.get("owned_sky_themes", []))
+    assert item["character_id"] not in owned_b, (
+        f"VULNERABILITY: user B sees an item only user A purchased: {item['character_id']}"
+    )
+
+    equip_type = _category_to_equip_type(item.get("category", "kite"))
+    eq = b.post(f"{API}/characters/equip", json={"character_id": item["character_id"], "type": equip_type})
+    assert eq.status_code == 403, (
+        f"VULNERABILITY: user B was able to equip an item only user A owns (status {eq.status_code})"
+    )
+
+
 def test_purchase_sync_rejects_product_id_mismatch(client):
     """/characters/purchase/sync must reject a product_id that doesn't match
     the character's configured store product, before ever calling out to
@@ -437,8 +570,9 @@ def test_purchase_sync_rejects_product_id_mismatch(client):
 def test_purchase_sync_unverified_transaction_not_granted(client):
     """A syntactically valid sync payload whose transaction RevenueCat has
     never seen must not grant the item — either because verification runs
-    and finds nothing (`not_yet_visible`), or because REVENUECAT_SECRET_API_KEY
-    isn't configured in this environment (500, documented limitation)."""
+    and finds nothing (`not_yet_visible`), because REVENUECAT_SECRET_API_KEY
+    isn't configured in this environment (500), or because it's configured
+    with a key RevenueCat itself rejects (502) - all are "not granted"."""
     me = client.get(f"{API}/auth/me").json()
     user_id = me["user_id"]
     import os
@@ -469,8 +603,8 @@ def test_purchase_sync_unverified_transaction_not_granted(client):
             "product_id": test_product_id,
             "transaction_id": "txn_never_happened",
         })
-        if r.status_code == 500:
-            pytest.skip(f"RevenueCat verification not configured in this env: {r.text}")
+        if r.status_code in (500, 502):
+            pytest.skip(f"RevenueCat not reachable/configured in this env: {r.status_code} {r.text}")
         assert r.status_code == 200, r.text
         body = r.json()
         assert body.get("ok") is False
@@ -551,8 +685,13 @@ def test_premium_webhook_grants_non_renewing_purchase_and_is_idempotent(client):
     if item is None:
         pytest.skip("No unowned item to grant")
 
-    test_product_id = f"test_webhook_product_{item['character_id']}"
-    transaction_id = f"test_webhook_txn_{item['character_id']}"
+    # Include a per-run nonce: transaction_id is the idempotency dedupe key
+    # (see _grant_purchase in server.py), so a fixed string would collide
+    # with a leftover row from an earlier test run against a non-fresh DB
+    # and get silently treated as "already granted to that other run's user".
+    nonce = int(time.time() * 1000)
+    test_product_id = f"test_webhook_product_{item['character_id']}_{nonce}"
+    transaction_id = f"test_webhook_txn_{item['character_id']}_{nonce}"
     db.characters.update_one(
         {"character_id": item["character_id"]},
         {"$set": {"product_id": test_product_id}},
@@ -577,8 +716,15 @@ def test_premium_webhook_grants_non_renewing_purchase_and_is_idempotent(client):
                      me2.get("owned_sky_themes", []))
         assert item["character_id"] in owned2
 
-        # Redelivery of the same event must not double-grant.
-        r2 = requests.post(f"{API}/premium/webhook", json=payload)
+        # Redelivery of the same event must not double-grant. RevenueCat sends
+        # the same static bearer header on every delivery attempt, including
+        # redeliveries, so this needs it too now that the endpoint fails
+        # closed on missing/invalid auth.
+        r2 = requests.post(
+            f"{API}/premium/webhook",
+            json=payload,
+            headers={"Authorization": f"Bearer {webhook_secret}"},
+        )
         assert r2.status_code == 200, r2.text
         grant_count = db.purchase_transactions.count_documents({"transaction_id": transaction_id})
         assert grant_count == 1
@@ -745,8 +891,17 @@ def test_free_tier_gate_blocks_after_daily_cap():
     assert detail.get("free_rounds_per_day") == 3
 
 
-def test_premium_sync_grants_unlimited_rounds():
-    """After marking premium via /premium/sync, the free-tier gate no longer applies."""
+def test_seeded_premium_bypasses_free_tier_gate():
+    """A user with is_premium=True in the DB gets unlimited rounds.
+
+    /api/premium/sync can't be used to set this up in a test: it independently
+    verifies against RevenueCat's REST API and ignores whatever the client
+    claims (see sync_premium in server.py), so a fabricated payload for a
+    user_id that never made a real purchase is never granted. Seed the DB
+    directly instead - this test is about whether the *gate* correctly honors
+    is_premium, not about how that field gets set. Spoofing /premium/sync
+    itself is covered separately by test_premium_sync_rejects_spoofed_payload.
+    """
     ts = int(time.time() * 1000)
     s = requests.Session()
     s.headers.update({"Content-Type": "application/json"})
@@ -756,28 +911,67 @@ def test_premium_sync_grants_unlimited_rounds():
         "name": "P",
     })
     assert r.status_code == 200
+    user_id = s.get(f"{API}/auth/me").json()["user_id"]
 
     # Exhaust free budget
     for _ in range(3):
         s.get(f"{API}/questions", params={"limit": 10})
     assert s.get(f"{API}/questions", params={"limit": 10}).status_code == 402
 
-    # Sync premium — mimics what mobile client posts after RevenueCat purchase
-    sync = s.post(f"{API}/premium/sync", json={
-        "entitlement_active": True,
-        "product_id": "monthly",
-        "source": "revenuecat_ios",
-    })
-    assert sync.status_code == 200
-    data = sync.json()
-    assert data["is_premium"] is True
-    assert data["premium_product_id"] == "monthly"
-    assert data["rounds_remaining_today"] is None
+    from pymongo import MongoClient
+    mc = MongoClient(os.environ.get("MONGO_URL"))
+    db = mc[os.environ.get("DB_NAME", "test_database")]
+    db.users.update_one(
+        {"user_id": user_id},
+        {"$set": {"is_premium": True, "premium_source": "pytest_seed", "premium_product_id": "monthly"}},
+    )
+
+    status = s.get(f"{API}/premium/status").json()
+    assert status["is_premium"] is True
+    assert status["premium_product_id"] == "monthly"
+    assert status["rounds_remaining_today"] is None
 
     # Post-premium round should succeed
     ok = s.get(f"{API}/questions", params={"limit": 10})
     assert ok.status_code == 200
     assert len(ok.json()) > 0
+
+
+def test_premium_sync_rejects_spoofed_payload():
+    """/premium/sync must never grant premium based on the client's claim.
+
+    Posts a fabricated entitlement_active=true for a user_id that never made
+    a real purchase. The only unacceptable outcome is is_premium: true coming
+    back - if RevenueCat isn't reachable/configured the endpoint should fail
+    outright (500/502) rather than fall back to trusting the payload."""
+    ts = int(time.time() * 1000)
+    s = requests.Session()
+    s.headers.update({"Content-Type": "application/json"})
+    r = s.post(f"{API}/auth/register", json={
+        "email": f"TEST_sync_spoof_{ts}@example.com",
+        "password": "DreamySky123!",
+        "name": "Sp",
+    })
+    assert r.status_code == 200
+
+    spoof = s.post(f"{API}/premium/sync", json={
+        "entitlement_active": True,
+        "product_id": "monthly",
+        "expires_at_iso": "2099-01-01T00:00:00Z",
+        "source": "spoofed",
+    })
+    if spoof.status_code == 200:
+        assert spoof.json().get("is_premium") is not True, (
+            f"VULNERABILITY: spoofed /premium/sync payload granted premium: {spoof.text}"
+        )
+
+    # Regardless of the sync call's outcome, the gate must not have opened.
+    for _ in range(3):
+        s.get(f"{API}/questions", params={"limit": 10})
+    gated = s.get(f"{API}/questions", params={"limit": 10})
+    assert gated.status_code == 402, (
+        f"VULNERABILITY: free-tier gate bypassed via spoofed /premium/sync (got {gated.status_code})"
+    )
 
 
 def test_premium_status_shape():
@@ -805,8 +999,13 @@ def test_premium_status_shape():
     assert body["rounds_remaining_today"] == 3
 
 
-def test_premium_downgrade_via_sync():
-    """Setting entitlement_active=false restores the free-tier gate."""
+def test_premium_sync_downgrades_previously_seeded_premium():
+    """/premium/sync must demote a user whose real RevenueCat subscriber has
+    no active entitlement - even if our DB currently says is_premium=True
+    (e.g. a lapsed subscription). This exercises the real downgrade path in
+    sync_premium against a genuine RevenueCat lookup, so it needs a working
+    REVENUECAT_SECRET_API_KEY; skip rather than fail if that isn't available
+    in this environment, since the property can't be observed either way."""
     ts = int(time.time() * 1000)
     s = requests.Session()
     s.headers.update({"Content-Type": "application/json"})
@@ -815,12 +1014,26 @@ def test_premium_downgrade_via_sync():
         "password": "DreamySky123!",
         "name": "D",
     })
-    # Grant then revoke
-    s.post(f"{API}/premium/sync", json={"entitlement_active": True, "product_id": "monthly"})
-    s.post(f"{API}/premium/sync", json={"entitlement_active": False})
+    user_id = s.get(f"{API}/auth/me").json()["user_id"]
 
-    status = s.get(f"{API}/premium/status").json()
-    assert status["is_premium"] is False
+    from pymongo import MongoClient
+    mc = MongoClient(os.environ.get("MONGO_URL"))
+    db = mc[os.environ.get("DB_NAME", "test_database")]
+    db.users.update_one(
+        {"user_id": user_id},
+        {"$set": {"is_premium": True, "premium_source": "pytest_seed", "premium_product_id": "monthly"}},
+    )
+    assert s.get(f"{API}/premium/status").json()["is_premium"] is True
+
+    # This user_id never made a real purchase, so a working RC lookup will
+    # find no active entitlement and sync_premium should downgrade it.
+    sync = s.post(f"{API}/premium/sync", json={"entitlement_active": False})
+    if sync.status_code != 200:
+        pytest.skip(f"RevenueCat not reachable/configured in this environment ({sync.status_code}); "
+                    "can't verify the real downgrade path here")
+
+    status = sync.json()
+    assert status["is_premium"] is False, f"expected downgrade to False, got: {status}"
     assert status["rounds_remaining_today"] == 3
 
     # Consume budget again

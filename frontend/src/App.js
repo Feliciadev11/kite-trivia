@@ -99,6 +99,15 @@ export const AuthProvider = ({ children }) => {
     } catch (e) {
       logError("Logout error:", e);
     }
+    // Clear the native-storage copy of the session token set by login() above -
+    // nothing currently reads it back, but leaving a stale token around after
+    // logout is the kind of thing that becomes a real bug the moment some
+    // future code path does start reading it.
+    try {
+      await Preferences.remove({ key: "session_token" });
+    } catch (e) {
+      logError("Logout: failed to clear stored session token:", e);
+    }
     setUser(null);
   };
 

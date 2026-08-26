@@ -62,10 +62,14 @@ pytest tests/test_kite_trivia.py::test_login_existing -v   # single test
 ```
 They default to `REACT_APP_BACKEND_URL=https://kite-trivia-quest.preview.emergentagent.com`;
 override that env var to point at a local server instead. The `client` fixture registers a fresh
-user and immediately POSTs `/api/premium/sync` to mark it premium, so gameplay tests aren't
-blocked by the free-tier gate — mirror that pattern in any new test that plays rounds. Some tests
-(password reset, purchase sync) connect to MongoDB directly via `MONGO_URL` to read/seed state the
-API doesn't expose.
+user and seeds `is_premium: true` directly in MongoDB, so gameplay tests aren't blocked by the
+free-tier gate — mirror that pattern in any new test that plays rounds. It seeds via MongoDB
+rather than `POST /api/premium/sync` because that endpoint independently verifies the entitlement
+against RevenueCat's REST API and ignores whatever the client claims (see `sync_premium` in
+`server.py`), so it can never be used to fake premium for a test account that made no real
+purchase — `test_premium_sync_rejects_spoofed_payload` in `test_kite_trivia.py` covers exactly
+that property. Some tests (password reset, purchase sync) connect to MongoDB directly via
+`MONGO_URL` to read/seed state the API doesn't expose.
 
 There are duplicate-looking test scripts at the repo root (`backend_test.py`) and in
 `backend/backend_test.py` — they are different (different base URL construction); the real,
