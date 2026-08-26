@@ -513,13 +513,32 @@ def test_stripe_webhook_endpoint_removed():
     assert r.status_code in (404, 405), f"expected 404/405, got {r.status_code}: {r.text}"
 
 
+def test_premium_webhook_rejects_missing_or_wrong_auth(client):
+    """The webhook must never process an event without a valid bearer secret —
+    it must fail closed (401/500), not silently accept, regardless of whether
+    REVENUECAT_WEBHOOK_SECRET happens to be configured on this server."""
+    payload = {"event": {"type": "NON_RENEWING_PURCHASE", "app_user_id": "nobody", "product_id": "x", "id": "y"}}
+
+    r_no_auth = requests.post(f"{API}/premium/webhook", json=payload)
+    assert r_no_auth.status_code in (401, 500), r_no_auth.text
+
+    r_wrong_auth = requests.post(
+        f"{API}/premium/webhook", json=payload,
+        headers={"Authorization": "Bearer definitely-not-the-secret"},
+    )
+    assert r_wrong_auth.status_code in (401, 500), r_wrong_auth.text
+
+
 def test_premium_webhook_grants_non_renewing_purchase_and_is_idempotent(client):
     """RevenueCat webhook NON_RENEWING_PURCHASE events are the authoritative,
     idempotent grant path — same purchase_transactions dedupe key that
     /characters/purchase/sync uses."""
+    webhook_secret = os.environ.get("REVENUECAT_WEBHOOK_SECRET")
+    if not webhook_secret:
+        pytest.skip("REVENUECAT_WEBHOOK_SECRET not set in test environment")
+
     me = client.get(f"{API}/auth/me").json()
     user_id = me["user_id"]
-    import os
     from pymongo import MongoClient
     mc = MongoClient(os.environ.get("MONGO_URL"))
     db = mc[os.environ.get("DB_NAME", "test_database")]
@@ -545,7 +564,11 @@ def test_premium_webhook_grants_non_renewing_purchase_and_is_idempotent(client):
             "product_id": test_product_id,
             "id": transaction_id,
         }}
-        r1 = requests.post(f"{API}/premium/webhook", json=payload)
+        r1 = requests.post(
+            f"{API}/premium/webhook",
+            json=payload,
+            headers={"Authorization": f"Bearer {webhook_secret}"},
+        )
         assert r1.status_code == 200, r1.text
 
         me2 = client.get(f"{API}/auth/me").json()

@@ -821,10 +821,11 @@ async def premium_webhook(request: Request):
     `Authorization: Bearer <secret>` header — not HMAC-signed like Stripe).
     """
     webhook_secret = os.environ.get("REVENUECAT_WEBHOOK_SECRET")
-    if webhook_secret:
-        auth_header = request.headers.get("Authorization", "")
-        if auth_header != f"Bearer {webhook_secret}":
-            raise HTTPException(status_code=401, detail="Invalid webhook auth")
+    if not webhook_secret:
+        raise HTTPException(status_code=500, detail="Webhook verification not configured")
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header != f"Bearer {webhook_secret}":
+        raise HTTPException(status_code=401, detail="Invalid webhook auth")
 
     try:
         body = await request.json()

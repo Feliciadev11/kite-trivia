@@ -20,14 +20,17 @@ import { logError } from "./logger";
 // RevenueCat public SDK keys (safe to ship in the client). Grab them from
 // RevenueCat → Project → API keys.
 //
-// Real iOS production key. Android will fall back to the same string if the
-// Android env override isn't set — replace with your goog_ key when you
-// create the Android app in RevenueCat.
+// Real iOS production key.
 const REVENUECAT_IOS_DEFAULT_KEY = "appl_FDZleDDwzBzsjRGiwESYlMsMwvo";
 export const REVENUECAT_API_KEY_IOS =
   process.env.REACT_APP_REVENUECAT_IOS_KEY || REVENUECAT_IOS_DEFAULT_KEY;
+// No default for Android — an iOS (appl_) key can't authenticate an Android
+// app in RevenueCat, so falling back to it would silently misconfigure the
+// SDK instead of surfacing a fixable error. Set REACT_APP_REVENUECAT_ANDROID_KEY
+// (a goog_ key) once the Android app is created in RevenueCat; until then
+// initPurchases() reports reason: "missing_api_key" on Android.
 export const REVENUECAT_API_KEY_ANDROID =
-  process.env.REACT_APP_REVENUECAT_ANDROID_KEY || REVENUECAT_IOS_DEFAULT_KEY;
+  process.env.REACT_APP_REVENUECAT_ANDROID_KEY || null;
 
 // The RevenueCat "entitlement" identifier — must match the exact identifier
 // configured in your RevenueCat dashboard. Case-sensitive, with a space.
