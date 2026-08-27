@@ -141,8 +141,22 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  // Exchanges an Emergent OAuth session_id for an app session. Used by the
+  // web hash-fragment flow (AuthCallback, below).
+  const exchangeSessionId = useCallback(async (sessionId) => {
+    const response = await axios.post(`${API}/auth/session`,
+      { session_id: sessionId },
+      { withCredentials: true }
+    );
+    if (IS_NATIVE && response.data?.session_token) {
+      await SecureStorage.setItem(SESSION_TOKEN_KEY, response.data.session_token);
+    }
+    setUser(response.data);
+    return response.data;
+  }, []);
+
   return (
-    <AuthContext.Provider value={{ user, setUser, loading, login, register, logout, refreshUser }}>
+    <AuthContext.Provider value={{ user, setUser, loading, login, register, logout, refreshUser, exchangeSessionId }}>
       {children}
     </AuthContext.Provider>
   );
@@ -152,7 +166,7 @@ export const AuthProvider = ({ children }) => {
 const AuthCallback = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { setUser } = useAuth();
+  const { exchangeSessionId } = useAuth();
   const hasProcessed = useRef(false);
 
   useEffect(() => {
@@ -162,18 +176,12 @@ const AuthCallback = () => {
     const processAuth = async () => {
       const hash = location.hash;
       const sessionIdMatch = hash.match(/session_id=([^&]+)/);
-      
+
       if (sessionIdMatch) {
-        const sessionId = sessionIdMatch[1];
-        
         try {
-          const response = await axios.post(`${API}/auth/session`, 
-            { session_id: sessionId },
-            { withCredentials: true }
-          );
-          setUser(response.data);
-          toast.success(`Welcome, ${response.data.name}!`);
-          navigate('/dashboard', { replace: true, state: { user: response.data } });
+          const userData = await exchangeSessionId(sessionIdMatch[1]);
+          toast.success(`Welcome, ${userData.name}!`);
+          navigate('/dashboard', { replace: true, state: { user: userData } });
         } catch (error) {
           logError("Auth error:", error);
           toast.error("Authentication failed");
@@ -185,7 +193,7 @@ const AuthCallback = () => {
     };
 
     processAuth();
-  }, [location, navigate, setUser]);
+  }, [location, navigate, exchangeSessionId]);
 
   return (
     <div className="min-h-screen sky-gradient flex items-center justify-center">
