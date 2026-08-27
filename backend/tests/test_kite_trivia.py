@@ -256,6 +256,15 @@ def test_claim_daily_reward(client):
 
 
 # ---------- Forgot / Reset Password ----------
+#
+# The reset code is intentionally never returned by /auth/forgot-password (see
+# the SECURITY note on that endpoint in server.py) and is stored bcrypt-hashed
+# in password_resets.code_hash - a one-way hash, so there is no way to recover
+# a real generated code from the DB either. Tests that need to drive
+# /auth/reset-password with a *known* code seed a password_resets document
+# directly, hashed the exact same way the endpoint hashes a real one
+# (_seed_reset_code below). This never touches or weakens production code -
+# it only gives the test a code it already knows the plaintext of.
 def _register_user(email_suffix):
     s = requests.Session()
     s.headers.update({"Content-Type": "application/json"})
@@ -269,18 +278,53 @@ def _register_user(email_suffix):
     }
     r = s.post(f"{API}/auth/register", json=payload)
     assert r.status_code == 200, r.text
-    return s, payload
+    return s, payload, r.json()["user_id"]
 
 
-def test_forgot_password_registered_returns_code():
-    _, user = _register_user("happy")
+def _seed_reset_code(email, user_id, code="123456"):
+    """Insert a password_resets doc with a known plaintext code, hashed the
+    same way /auth/forgot-password hashes a real one (bcrypt). Lets tests
+    drive /auth/reset-password deterministically without the endpoint ever
+    needing to expose a real generated code."""
+    import bcrypt
+    import uuid as _uuid
+    from datetime import datetime, timedelta, timezone
+    from pymongo import MongoClient
+    mc = MongoClient(os.environ.get("MONGO_URL"))
+    db = mc[os.environ.get("DB_NAME", "test_database")]
+    now = datetime.now(timezone.utc)
+    db.password_resets.insert_one({
+        "reset_id": f"rst_test_{_uuid.uuid4().hex[:16]}",
+        "email": email,
+        "user_id": user_id,
+        "code_hash": bcrypt.hashpw(code.encode(), bcrypt.gensalt()).decode(),
+        "used": False,
+        "created_at": now.isoformat(),
+        "expires_at": (now + timedelta(seconds=900)).isoformat(),
+    })
+    return code
+
+
+def test_forgot_password_registered_never_returns_code_but_seeds_pending_reset():
+    """SECURITY: the response must never carry the code (see server.py), for a
+    registered email exactly as much as an unregistered one. Verify the
+    generic-response contract *and* that the endpoint actually did its job
+    server-side (a real, unused password_resets row got created) - so this
+    isn't just testing an empty response, it's testing real code generation
+    that merely stays server-side."""
+    _, user, user_id = _register_user("happy")
     r = requests.post(f"{API}/auth/forgot-password", json={"email": user["email"]})
     assert r.status_code == 200, r.text
     body = r.json()
     assert "message" in body
     assert body.get("expires_in_seconds") == 900
-    code = body.get("code")
-    assert isinstance(code, str) and len(code) == 6 and code.isdigit()
+    assert "code" not in body, "SECURITY REGRESSION: /auth/forgot-password must never return the code"
+
+    from pymongo import MongoClient
+    mc = MongoClient(os.environ.get("MONGO_URL"))
+    db = mc[os.environ.get("DB_NAME", "test_database")]
+    pending = db.password_resets.count_documents({"user_id": user_id, "used": False})
+    assert pending >= 1, "forgot-password did not actually generate a reset code server-side"
 
 
 def test_forgot_password_unregistered_returns_null_code():
@@ -295,9 +339,8 @@ def test_forgot_password_unregistered_returns_null_code():
 
 
 def test_reset_password_happy_path_and_login_with_new():
-    _, user = _register_user("reset_ok")
-    code = requests.post(f"{API}/auth/forgot-password",
-                         json={"email": user["email"]}).json()["code"]
+    _, user, user_id = _register_user("reset_ok")
+    code = _seed_reset_code(user["email"], user_id)
     new_pw = "NewDreamy456!"
     r = requests.post(f"{API}/auth/reset-password", json={
         "email": user["email"], "code": code, "new_password": new_pw,
@@ -317,8 +360,8 @@ def test_reset_password_happy_path_and_login_with_new():
 
 
 def test_reset_password_invalid_code_returns_400():
-    _, user = _register_user("badcode")
-    requests.post(f"{API}/auth/forgot-password", json={"email": user["email"]})
+    _, user, user_id = _register_user("badcode")
+    _seed_reset_code(user["email"], user_id)
     r = requests.post(f"{API}/auth/reset-password", json={
         "email": user["email"], "code": "000000", "new_password": "AnotherSky789!",
     })
@@ -327,9 +370,8 @@ def test_reset_password_invalid_code_returns_400():
 
 
 def test_reset_password_single_use_enforced():
-    _, user = _register_user("reuse")
-    code = requests.post(f"{API}/auth/forgot-password",
-                         json={"email": user["email"]}).json()["code"]
+    _, user, user_id = _register_user("reuse")
+    code = _seed_reset_code(user["email"], user_id)
     pw1 = "FirstSky123!"
     r1 = requests.post(f"{API}/auth/reset-password", json={
         "email": user["email"], "code": code, "new_password": pw1,
@@ -344,9 +386,8 @@ def test_reset_password_single_use_enforced():
 
 
 def test_reset_password_short_password_returns_400():
-    _, user = _register_user("short")
-    code = requests.post(f"{API}/auth/forgot-password",
-                         json={"email": user["email"]}).json()["code"]
+    _, user, user_id = _register_user("short")
+    code = _seed_reset_code(user["email"], user_id)
     r = requests.post(f"{API}/auth/reset-password", json={
         "email": user["email"], "code": code, "new_password": "abc",
     })
@@ -355,19 +396,26 @@ def test_reset_password_short_password_returns_400():
 
 
 def test_forgot_password_rate_limit_caps_at_3():
-    _, user = _register_user("ratecap")
-    # 3 active codes allowed
-    codes = []
+    """The real rate-limit lives in /auth/forgot-password itself (max 3 active
+    codes/email) - exercise the real endpoint and verify it server-side via
+    the password_resets count, since the response never reveals codes or
+    counts either way."""
+    _, user, user_id = _register_user("ratecap")
+    from pymongo import MongoClient
+    mc = MongoClient(os.environ.get("MONGO_URL"))
+    db = mc[os.environ.get("DB_NAME", "test_database")]
+
     for _ in range(3):
-        body = requests.post(f"{API}/auth/forgot-password",
-                             json={"email": user["email"]}).json()
-        codes.append(body.get("code"))
-    assert all(c is not None for c in codes), codes
-    # 4th must return generic (code=None) without raising
-    fourth = requests.post(f"{API}/auth/forgot-password",
-                           json={"email": user["email"]})
+        r = requests.post(f"{API}/auth/forgot-password", json={"email": user["email"]})
+        assert r.status_code == 200, r.text
+        assert "code" not in r.json()
+    assert db.password_resets.count_documents({"user_id": user_id, "used": False}) == 3
+
+    # 4th must be capped — no new row, still a generic 200 response.
+    fourth = requests.post(f"{API}/auth/forgot-password", json={"email": user["email"]})
     assert fourth.status_code == 200
-    assert fourth.json().get("code") is None
+    assert "code" not in fourth.json()
+    assert db.password_resets.count_documents({"user_id": user_id, "used": False}) == 3
 
 
 # ---------- Profile ----------
