@@ -2,9 +2,34 @@ import { useEffect, useState, useRef, createContext, useContext, useCallback } f
 import "@/App.css";
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom";
 import axios from "axios";
-import { Preferences } from "@capacitor/preferences";
+import { Capacitor } from "@capacitor/core";
+import { SecureStorage } from "@aparajita/capacitor-secure-storage";
 import { Toaster, toast } from "sonner";
 import { logError } from "./lib/logger";
+
+const SESSION_TOKEN_KEY = "session_token";
+const IS_NATIVE = Capacitor.isNativePlatform();
+
+// Native-only: the SameSite=None session cookie doesn't always persist/reattach
+// reliably from a Capacitor WKWebView (cross-site relative to the API - see the
+// cookie comment in server.py). As a fallback, native builds also store the
+// session token in the iOS Keychain / Android Keystore (never UserDefaults/
+// SharedPreferences) and attach it as Authorization: Bearer on every request.
+// Web is untouched - it continues to rely solely on the cookie.
+if (IS_NATIVE) {
+  axios.interceptors.request.use(async (config) => {
+    try {
+      const token = await SecureStorage.getItem(SESSION_TOKEN_KEY);
+      if (token) {
+        config.headers = config.headers || {};
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+    } catch (e) {
+      logError("Failed to read session token from secure storage", e);
+    }
+    return config;
+  });
+}
 
 // Pages
 import { LandingPage } from "./pages/Landing";
@@ -73,13 +98,8 @@ export const AuthProvider = ({ children }) => {
     const response = await axios.post(`${API}/auth/login`, { email, password }, {
       withCredentials: true
     });
-    const token = response.data?.session_token;
-
-    if (token) {
-      await Preferences.set({
-        key: "session_token",
-        value: token,
-      });
+    if (IS_NATIVE && response.data?.session_token) {
+      await SecureStorage.setItem(SESSION_TOKEN_KEY, response.data.session_token);
     }
     setUser(response.data);
     return response.data;
@@ -89,6 +109,9 @@ export const AuthProvider = ({ children }) => {
     const response = await axios.post(`${API}/auth/register`, { email, password, name }, {
       withCredentials: true
     });
+    if (IS_NATIVE && response.data?.session_token) {
+      await SecureStorage.setItem(SESSION_TOKEN_KEY, response.data.session_token);
+    }
     setUser(response.data);
     return response.data;
   };
@@ -99,14 +122,12 @@ export const AuthProvider = ({ children }) => {
     } catch (e) {
       logError("Logout error:", e);
     }
-    // Clear the native-storage copy of the session token set by login() above -
-    // nothing currently reads it back, but leaving a stale token around after
-    // logout is the kind of thing that becomes a real bug the moment some
-    // future code path does start reading it.
-    try {
-      await Preferences.remove({ key: "session_token" });
-    } catch (e) {
-      logError("Logout: failed to clear stored session token:", e);
+    if (IS_NATIVE) {
+      try {
+        await SecureStorage.removeItem(SESSION_TOKEN_KEY);
+      } catch (e) {
+        logError("Logout: failed to clear stored session token:", e);
+      }
     }
     setUser(null);
   };

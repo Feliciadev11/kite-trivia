@@ -90,6 +90,13 @@ class User(BaseModel):
     # Free-tier daily round budget (only relevant when is_premium=False)
     rounds_played_today: int = 0
     last_round_date: Optional[str] = None  # YYYY-MM-DD in UTC
+    # Only ever populated on register/login/session-exchange responses (never
+    # persisted, never returned from /auth/me) - lets native clients attach
+    # Authorization: Bearer as a fallback when the cross-site SameSite=None
+    # cookie doesn't reliably persist/reattach in a WKWebView (get_current_user
+    # already accepts either). See CLAUDE.md's cookie note for why the cookie
+    # alone isn't sufficient in the Capacitor WebView.
+    session_token: Optional[str] = None
 
 class Character(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -251,6 +258,7 @@ async def register(user_data: UserCreate, response: Response):
     user_doc.pop("password_hash", None)
     user_doc.pop("_id", None)
     user_doc["created_at"] = now
+    user_doc["session_token"] = session_token
     return User(**user_doc)
 
 @api_router.post("/auth/login")
@@ -291,6 +299,7 @@ async def login(credentials: UserLogin, response: Response):
     user_doc.pop("password_hash", None)
     if isinstance(user_doc.get("created_at"), str):
         user_doc["created_at"] = datetime.fromisoformat(user_doc["created_at"])
+    user_doc["session_token"] = session_token
     return User(**user_doc)
 
 @api_router.post("/auth/session")
@@ -386,10 +395,10 @@ async def exchange_session(request: Request, response: Response):
         path="/",
         max_age=7*24*60*60
     )
-    
+
     if isinstance(user_doc.get("created_at"), str):
         user_doc["created_at"] = datetime.fromisoformat(user_doc["created_at"])
-    
+    user_doc["session_token"] = session_token
     return User(**user_doc)
 
 @api_router.get("/auth/me")
