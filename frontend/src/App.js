@@ -132,6 +132,23 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
   };
 
+  const deleteAccount = async (password) => {
+    const response = await axios.post(
+      `${API}/auth/account/delete`,
+      { password },
+      { withCredentials: true }
+    );
+    if (IS_NATIVE) {
+      try {
+        await SecureStorage.removeItem(SESSION_TOKEN_KEY);
+      } catch (e) {
+        logError("Delete account: failed to clear stored session token:", e);
+      }
+    }
+    setUser(null);
+    return response.data;
+  };
+
   const refreshUser = async () => {
     try {
       const response = await axios.get(`${API}/auth/me`, { withCredentials: true });
@@ -156,7 +173,7 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, setUser, loading, login, register, logout, refreshUser, exchangeSessionId }}>
+    <AuthContext.Provider value={{ user, setUser, loading, login, register, logout, deleteAccount, refreshUser, exchangeSessionId }}>
       {children}
     </AuthContext.Provider>
   );

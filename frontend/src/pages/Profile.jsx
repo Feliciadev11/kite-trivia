@@ -4,16 +4,34 @@ import { motion } from "framer-motion";
 import axios from "axios";
 import { Button } from "../components/ui/button";
 import { Progress } from "../components/ui/progress";
+import { Input } from "../components/ui/input";
+import { Label } from "../components/ui/label";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogFooter,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogCancel,
+} from "../components/ui/alert-dialog";
 import { useAuth, API, LoadingKite } from "../App";
+import { usePremium } from "../contexts/PremiumContext";
 import { toast } from "sonner";
-import { ArrowLeft, Star, Target, Zap, Trophy, Calendar, TrendingUp, Sparkles } from "lucide-react";
+import { ArrowLeft, Star, Target, Zap, Trophy, Calendar, TrendingUp, Sparkles, AlertTriangle } from "lucide-react";
 import { KiteCharacter } from "../components/KiteCharacter";
+import { logError } from "../lib/logger";
 
 export default function ProfilePage() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, deleteAccount } = useAuth();
+  const { is_premium, presentNativePaywall } = usePremium();
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deletePassword, setDeletePassword] = useState("");
+  const [deleteError, setDeleteError] = useState("");
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -30,6 +48,29 @@ export default function ProfilePage() {
     fetchProfile();
     return () => { alive = false; };
   }, []);
+
+  const handleDeleteAccount = async () => {
+    if (!deletePassword) {
+      setDeleteError("Enter your password to confirm.");
+      return;
+    }
+    setDeleting(true);
+    setDeleteError("");
+    try {
+      await deleteAccount(deletePassword);
+      toast.success("Your account has been deleted.");
+      navigate("/login", { replace: true });
+    } catch (error) {
+      logError("Delete account error:", error);
+      setDeleteError(
+        error?.response?.status === 401
+          ? "Incorrect password."
+          : "Couldn't delete your account. Please try again."
+      );
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -134,6 +175,47 @@ export default function ProfilePage() {
           />
         </motion.div>
 
+        {/* Kite Premium */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.15 }}
+          className="glass-card p-6 mb-6"
+          data-testid="premium-card"
+        >
+          {is_premium ? (
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-sky-100 flex items-center justify-center">
+                <Sparkles className="w-5 h-5 text-sky-600" />
+              </div>
+              <div>
+                <p className="font-semibold text-sky-900">Kite Premium</p>
+                <p className="text-sm text-sky-600">You have the full experience unlocked.</p>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-sky-100 to-indigo-100 flex items-center justify-center">
+                  <Sparkles className="w-5 h-5 text-indigo-500" />
+                </div>
+                <div>
+                  <p className="font-semibold text-sky-900">Kite Premium</p>
+                  <p className="text-sm text-slate-500">Unlock unlimited daily rounds and the full experience.</p>
+                </div>
+              </div>
+              <Button
+                onClick={presentNativePaywall}
+                className="rounded-full bg-gradient-to-r from-sky-500 to-indigo-500 hover:from-sky-600 hover:to-indigo-600 text-white"
+                data-testid="profile-go-premium-btn"
+              >
+                <Sparkles className="w-4 h-4 mr-2" />
+                Go Premium
+              </Button>
+            </div>
+          )}
+        </motion.div>
+
         {/* Characters Owned */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -216,7 +298,101 @@ export default function ProfilePage() {
           <Calendar className="w-4 h-4" />
           Playing since {new Date(data?.created_at).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
         </motion.div>
+
+        {/* Danger Zone */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.35 }}
+          className="glass-card p-6 mt-6 border border-red-200"
+          data-testid="danger-zone"
+        >
+          <h3 className="font-semibold text-red-700 mb-2 flex items-center gap-2">
+            <AlertTriangle className="w-5 h-5" />
+            Danger Zone
+          </h3>
+          <p className="text-sm text-slate-500 mb-4">
+            Permanently delete your Kite account and all associated data. This cannot be undone.
+          </p>
+          <Button
+            variant="outline"
+            className="rounded-full border-red-300 text-red-600 hover:bg-red-50"
+            onClick={() => setDeleteOpen(true)}
+            data-testid="delete-account-btn"
+          >
+            Delete Account
+          </Button>
+        </motion.div>
       </main>
+
+      <AlertDialog
+        open={deleteOpen}
+        onOpenChange={(open) => {
+          setDeleteOpen(open);
+          if (!open) {
+            setDeletePassword("");
+            setDeleteError("");
+          }
+        }}
+      >
+        <AlertDialogContent data-testid="delete-account-dialog">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete your account?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 text-sm text-slate-600">
+                <p>
+                  This permanently deletes your Kite account — your progress, coins,
+                  and owned kites/companions/sky themes — and cannot be undone.
+                </p>
+                {user?.is_premium && user?.premium_source === "revenuecat" && (
+                  <p className="text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                    Deleting your Kite account does <strong>not</strong> cancel your Apple
+                    subscription. To stop being billed, manage it separately in{" "}
+                    <button
+                      type="button"
+                      className="underline font-medium"
+                      onClick={() => window.open("https://apps.apple.com/account/subscriptions", "_blank")}
+                    >
+                      Settings &rarr; [your name] &rarr; Subscriptions
+                    </button>{" "}
+                    on your iPhone or iPad.
+                  </p>
+                )}
+                <div className="pt-1">
+                  <Label htmlFor="delete-password" className="text-slate-700">
+                    Enter your password to confirm
+                  </Label>
+                  <Input
+                    id="delete-password"
+                    type="password"
+                    autoComplete="current-password"
+                    value={deletePassword}
+                    onChange={(e) => setDeletePassword(e.target.value)}
+                    className="mt-1.5"
+                    data-testid="delete-account-password"
+                  />
+                  {deleteError && (
+                    <p className="text-red-600 text-xs mt-1.5" data-testid="delete-account-error">
+                      {deleteError}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteAccount}
+              disabled={deleting}
+              data-testid="delete-account-confirm"
+            >
+              {deleting ? "Deleting…" : "Yes, delete my account"}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

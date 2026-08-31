@@ -55,6 +55,9 @@ class ResetPasswordRequest(BaseModel):
     code: str
     new_password: str
 
+class DeleteAccountRequest(BaseModel):
+    password: str
+
 class User(BaseModel):
     model_config = ConfigDict(extra="ignore")
     user_id: str
@@ -410,9 +413,40 @@ async def logout(request: Request, response: Response):
     session_token = request.cookies.get("session_token")
     if session_token:
         await db.user_sessions.delete_one({"session_token": session_token})
-    
+
     response.delete_cookie(key="session_token", path="/")
     return {"message": "Logged out"}
+
+@api_router.post("/auth/account/delete")
+async def delete_account(
+    payload: DeleteAccountRequest,
+    response: Response,
+    current_user: User = Depends(get_current_user),
+):
+    """Permanently deletes the caller's account and personal account data.
+
+    Requires re-entering the current password as a deliberate confirmation
+    step (on top of whatever confirmation the client already shows). This
+    is a hard delete, not a deactivation — the user document itself is
+    removed. `purchase_transactions` is intentionally NOT touched: it's the
+    purchase/tax audit trail the Privacy Policy already promises to retain
+    even after account deletion.
+    """
+    user_doc = await db.users.find_one({"user_id": current_user.user_id}, {"_id": 0})
+    if not user_doc or not verify_password(payload.password, user_doc.get("password_hash", "")):
+        raise HTTPException(status_code=401, detail="Incorrect password")
+
+    user_id = current_user.user_id
+    await db.users.delete_one({"user_id": user_id})
+    await db.user_sessions.delete_many({"user_id": user_id})
+    await db.password_resets.delete_many({"user_id": user_id})
+
+    response.delete_cookie(key="session_token", path="/")
+    return {
+        "message": "Account deleted",
+        "was_premium": bool(user_doc.get("is_premium")),
+        "premium_source": user_doc.get("premium_source"),
+    }
 
 # ==================== PASSWORD RESET ====================
 # In-app reset flow (no email provider). A 6-digit code is generated, hashed at rest,
