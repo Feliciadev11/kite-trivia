@@ -163,7 +163,7 @@ export async function getStoreProducts(productIds) {
   try {
     const result = await mod.Purchases.getProducts({
       productIdentifiers: productIds,
-      type: "INAPP",
+      type: "NON_SUBSCRIPTION",
     });
     const products = {};
     for (const p of result?.products || []) {
