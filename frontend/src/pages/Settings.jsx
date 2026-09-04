@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { ArrowLeft, Volume2, VolumeX, Music, Sparkles, Cloud, Moon, Wind } from "lucide-react";
+import { ArrowLeft, Volume2, VolumeX, Music, Sparkles, Cloud, Moon, Wind, LogIn } from "lucide-react";
 import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Switch } from "../components/ui/switch";
@@ -63,6 +63,45 @@ export const SettingsPage = () => {
             Gentle controls for ambient music and soft sound feedback. Everything you change here stays with you.
           </p>
         </motion.div>
+
+        {/* Log in to an existing account - only shown for anonymous sessions.
+            This is the self-service way back to a real account's entitlements
+            (e.g. a premium subscription) without reinstalling; see
+            memory/anonymous-purchases-migration-plan.md. */}
+        {user?.is_anonymous && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.05, ease: "easeOut" }}
+          >
+            <Card className="p-6 mb-6 bg-white/70 backdrop-blur-md border-white/60 rounded-3xl shadow-sm">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex gap-3 items-start">
+                  <div className="w-10 h-10 rounded-2xl bg-sky-100 flex items-center justify-center">
+                    <LogIn className="w-5 h-5 text-sky-600" />
+                  </div>
+                  <div>
+                    <Label className="text-base font-medium text-slate-700">
+                      Already have an account?
+                    </Label>
+                    <p className="text-sm text-slate-500 mt-0.5">
+                      Log in to restore a subscription or purchases from a different session.
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => navigate('/login')}
+                  data-testid="settings-login-btn"
+                  className="rounded-full border-sky-200 hover:bg-sky-50 whitespace-nowrap"
+                >
+                  Log in
+                </Button>
+              </div>
+            </Card>
+          </motion.div>
+        )}
 
         {/* Ambient Music Card */}
         <motion.div

@@ -61,9 +61,10 @@ class DeleteAccountRequest(BaseModel):
 class User(BaseModel):
     model_config = ConfigDict(extra="ignore")
     user_id: str
-    email: str
+    email: Optional[str] = None  # None for accounts created via /auth/anonymous
     name: str
     picture: Optional[str] = None
+    is_anonymous: bool = False
     coins: int = 0
     current_character: str = "basic_kite"
     current_companion: Optional[str] = None
@@ -259,6 +260,69 @@ async def register(user_data: UserCreate, response: Response):
     )
     
     user_doc.pop("password_hash", None)
+    user_doc.pop("_id", None)
+    user_doc["created_at"] = now
+    user_doc["session_token"] = session_token
+    return User(**user_doc)
+
+@api_router.post("/auth/anonymous")
+async def create_anonymous_session(response: Response):
+    """Creates a backend account with no credentials (is_anonymous=True) and
+    issues a session, for a device with no existing session at all. Lets
+    gameplay (round-gating, leveling) and purchases work without requiring
+    registration, per Apple Guideline 5.1.1(v) - see
+    memory/anonymous-purchases-migration-plan.md. Called by AuthProvider's
+    checkAuth() only after a confirmed 401 from /auth/me (never on a network
+    error or 5xx), so a transient failure never spins up a spurious account.
+    """
+    user_id = f"user_{uuid.uuid4().hex[:12]}"
+    now = datetime.now(timezone.utc)
+
+    user_doc = {
+        "user_id": user_id,
+        "email": None,
+        "name": "Guest",
+        "is_anonymous": True,
+        "picture": None,
+        "coins": 0,
+        "current_character": "basic_kite",
+        "current_companion": None,
+        "current_sky_theme": "dawn",
+        "owned_characters": ["basic_kite"],
+        "owned_companions": [],
+        "owned_sky_themes": ["dawn"],
+        "level": 1,
+        "xp": 0,
+        "total_correct": 0,
+        "total_questions": 0,
+        "weekly_score": 0,
+        "login_streak": 0,
+        "last_login_date": None,
+        "total_rewards_claimed": 0,
+        "created_at": now.isoformat()
+    }
+
+    await db.users.insert_one(user_doc)
+
+    session_token = f"session_{uuid.uuid4().hex}"
+    session_doc = {
+        "user_id": user_id,
+        "session_token": session_token,
+        "expires_at": (now + timedelta(days=7)).isoformat(),
+        "created_at": now.isoformat()
+    }
+    await db.user_sessions.insert_one(session_doc)
+
+    response.set_cookie(
+        key="session_token",
+        value=session_token,
+        httponly=True,
+        secure=True,
+        samesite="none",
+        path="/",
+        max_age=7*24*60*60
+    )
+
     user_doc.pop("_id", None)
     user_doc["created_at"] = now
     user_doc["session_token"] = session_token
