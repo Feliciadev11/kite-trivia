@@ -53,8 +53,16 @@ def _register_real_user(suffix):
     }
     r = s.post(f"{API}/auth/register", json=payload)
     assert r.status_code == 200, r.text
-    user_id = s.get(f"{API}/auth/me").json()["user_id"]
-    return s, user_id
+    data = r.json()
+    # The session_token cookie is set Secure - fine over the real HTTPS preview
+    # domain these tests default to, but `requests` correctly won't send it back
+    # over plain http:// against a local server. Use the Bearer fallback the app
+    # already ships for exactly this (see get_current_user / CLAUDE.md's cookie
+    # note) instead of relying on the cookie jar.
+    s.headers.update({"Authorization": f"Bearer {data['session_token']}"})
+    me = s.get(f"{API}/auth/me")
+    assert me.status_code == 200, me.text
+    return s, data["user_id"]
 
 
 def _seed_session_only_user(db, *, is_anonymous, set_password_hash):

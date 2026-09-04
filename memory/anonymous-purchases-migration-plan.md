@@ -164,34 +164,41 @@ if not user_doc or not verify_password(payload.password, user_doc.get("password_
 Problem: an anonymous row has no `password_hash`. Today this doesn't just fail closed with 401 —
 `bcrypt.checkpw(..., "".encode())` raises on a malformed/empty hash, so it'd 500, not 401.
 
-Scoped change:
+Scoped change — **implemented and verified** (see Status below):
 
 ```python
 user_doc = await db.users.find_one({"user_id": current_user.user_id}, {"_id": 0})
 if not user_doc:
     raise HTTPException(status_code=401, detail="Incorrect password")
 
-# Deliberately a double condition, not `is_anonymous` alone: only skip the password
-# check when there is BOTH no password to check AND the account is flagged anonymous.
-# A real account must always go through verify_password below, unchanged, even if a
-# bug somehow left `is_anonymous` set on it.
-is_anonymous_no_password = bool(user_doc.get("is_anonymous")) and not user_doc.get("password_hash")
-if not is_anonymous_no_password:
-    if not payload.password or not verify_password(payload.password, user_doc.get("password_hash", "")):
+# Gated purely on whether a password_hash actually exists to check against - never
+# on is_anonymous. Any account that has a password_hash set, anonymous-flagged or
+# not, must still supply the correct password. Only an account with no password_hash
+# at all (e.g. one that never had credentials set) has nothing to verify, so it
+# can't be put through verify_password() without that raising (bcrypt.checkpw
+# errors on an empty/missing hash rather than returning False).
+password_hash = user_doc.get("password_hash")
+if password_hash:
+    if not payload.password or not verify_password(payload.password, password_hash):
         raise HTTPException(status_code=401, detail="Incorrect password")
-# else: anonymous account with no credentials to verify — deletion proceeds, gated only
-# by holding a valid session for that account (the get_current_user dependency already
-# enforces that).
 ```
+
+Note this superseded an earlier draft of this fix that gated on `is_anonymous AND no
+password_hash` — that version still crashed for the (shouldn't-happen-but-possible) case of a
+non-anonymous account somehow missing its `password_hash`. Gating on hash-presence alone covers
+that case too, without weakening the check for any account that does have one.
 
 Everything below this (the actual delete + session/reset cleanup + cookie clear) is unchanged.
 
-Regression test: `backend/tests/test_anonymous_account_deletion.py` (see repo — not yet
-implementable end-to-end since `POST /auth/anonymous` doesn't exist yet; the anonymous-user
+Regression test: `backend/tests/test_anonymous_account_deletion.py` (see repo; the anonymous-user
 tests seed the DB directly, matching the existing pattern in `test_kite_trivia.py` for state the
-API doesn't expose). One of the three tests (`test_anonymous_account_deletes_without_password`)
-is expected to **fail against current `main`** until the scoped change above lands — that's
-intentional, it's asserting the target behavior. The other two pass today and must keep passing.
+API doesn't expose, since `POST /auth/anonymous` — Phase 1 — doesn't exist yet).
+
+**Status: verified 4/4 passing** against a local backend + isolated MongoDB instance (not the
+shared/production database) after the scoped change above was applied. Before the change, 3 of
+the 4 passed (the regression guards) and `test_anonymous_account_deletes_without_password` failed
+with a 500 (`bcrypt.checkpw` raising on the empty hash) — confirmed live, not just reasoned about,
+matching the traceback at `server.py`'s prior `delete_account` implementation exactly.
 
 ## Open items not resolved by this plan
 

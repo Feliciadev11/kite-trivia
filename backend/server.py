@@ -433,8 +433,19 @@ async def delete_account(
     even after account deletion.
     """
     user_doc = await db.users.find_one({"user_id": current_user.user_id}, {"_id": 0})
-    if not user_doc or not verify_password(payload.password, user_doc.get("password_hash", "")):
+    if not user_doc:
         raise HTTPException(status_code=401, detail="Incorrect password")
+
+    # Gated purely on whether a password_hash actually exists to check against -
+    # never on is_anonymous. Any account that has a password_hash set, anonymous-
+    # flagged or not, must still supply the correct password. Only an account with
+    # no password_hash at all (e.g. one that never had credentials set) has nothing
+    # to verify, so it can't be put through verify_password() without that raising
+    # (bcrypt.checkpw errors on an empty/missing hash rather than returning False).
+    password_hash = user_doc.get("password_hash")
+    if password_hash:
+        if not payload.password or not verify_password(payload.password, password_hash):
+            raise HTTPException(status_code=401, detail="Incorrect password")
 
     user_id = current_user.user_id
     await db.users.delete_one({"user_id": user_id})
