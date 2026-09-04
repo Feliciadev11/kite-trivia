@@ -67,7 +67,14 @@ export const getPlatform = () => PLATFORM;
 // -------------------- Init --------------------
 /**
  * Configure the SDK. Idempotent — safe to call multiple times.
- * `appUserId` should be our backend user_id so RevenueCat webhooks include it.
+ *
+ * `appUserId` should be our backend user_id so RevenueCat webhooks include
+ * it, when one is already known. Pass nothing (or a falsy value) to
+ * configure RevenueCat ANONYMOUSLY instead — it mints and persists its own
+ * on-device anonymous ID. Used when there's no backend session yet (see
+ * bootPremium in PremiumContext.jsx). Re-identifying an already-configured
+ * SDK onto a real user_id later requires Purchases.logIn(), not a second
+ * call here — that aliasing step is deliberately not implemented yet.
  */
 export async function initPurchases(appUserId) {
   if (!IS_NATIVE) return { ok: false, reason: "unavailable" };
@@ -82,7 +89,8 @@ export async function initPurchases(appUserId) {
   }
 
   try {
-    await mod.Purchases.configure({ apiKey, appUserID: appUserId });
+    const config = appUserId ? { apiKey, appUserID: appUserId } : { apiKey };
+    await mod.Purchases.configure(config);
     _initialized = true;
     return { ok: true };
   } catch (e) {

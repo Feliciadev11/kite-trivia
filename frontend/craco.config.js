@@ -32,6 +32,17 @@ let webpackConfig = {
       },
     },
   },
+  // Jest doesn't inherit webpack's `alias` below - it needs its own mapping,
+  // or any test file that transitively imports something using `@/...`
+  // (e.g. App.js's `import "@/App.css"`) fails to even load. There were no
+  // existing test files in this project to have surfaced this before.
+  jest: {
+    configure: {
+      moduleNameMapper: {
+        "^@/(.*)$": "<rootDir>/src/$1",
+      },
+    },
+  },
   webpack: {
     alias: {
       '@': path.resolve(__dirname, 'src'),
