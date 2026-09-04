@@ -184,11 +184,26 @@ async def get_current_user(
     user_doc = await db.users.find_one({"user_id": session_doc["user_id"]}, {"_id": 0})
     if not user_doc:
         raise HTTPException(status_code=401, detail="User not found")
-    
+
+    # Sliding-window session refresh, anonymous accounts only: an active
+    # anonymous player's session keeps extending on every authenticated
+    # request so they never expire out from under active use, while an
+    # abandoned anonymous install's session just sits at its last-touched
+    # expiry and genuinely ages out (for the not-yet-built retention/prune
+    # job - see the migration plan doc's risk 4). Real accounts are
+    # unaffected: they keep the fixed expiry from login/register and are
+    # expected to log back in with their credentials, same as today.
+    if user_doc.get("is_anonymous"):
+        new_expiry = datetime.now(timezone.utc) + timedelta(days=7)
+        await db.user_sessions.update_one(
+            {"session_token": token},
+            {"$set": {"expires_at": new_expiry.isoformat()}},
+        )
+
     # Convert datetime if string
     if isinstance(user_doc.get("created_at"), str):
         user_doc["created_at"] = datetime.fromisoformat(user_doc["created_at"])
-    
+
     return User(**user_doc)
 
 def hash_password(password: str) -> str:
