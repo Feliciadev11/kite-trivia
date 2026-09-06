@@ -137,8 +137,33 @@ gates, next-unlock, equip, claim, purchase/sync), sky themes, leaderboard, profi
   the main coding agent and a separate testing agent on the Emergent platform. The protocol block
   at the top ("DO NOT EDIT OR REMOVE THIS SECTION") is platform tooling, not project
   documentation — leave it intact, append testing data below it if you're following that protocol.
-- Entitlement/product identifiers (RevenueCat entitlement name, product IDs) must be changed in
-  lockstep across `backend/server.py` (`PREMIUM_ENTITLEMENT_ID`), `frontend/src/lib/purchases.js`
-  (`KITE_PREMIUM_ENTITLEMENT_ID`, `KITE_PREMIUM_PRODUCT_IDS`), `PremiumContext.jsx`, and the
-  pytest assertions in `backend/tests/test_kite_trivia.py` — this has been the source of most
-  premium/IAP regressions historically.
+- Entitlement/product identifiers and the progression unlock gates (RevenueCat entitlement name,
+  product IDs, `PROGRESSIVE_GATES`/`RARITY_GATES`) now have ONE source of truth:
+  `backend/entitlements_config.json`. `backend/server.py` loads it directly.
+  `frontend/src/lib/entitlements.generated.json` is a generated copy — `yarn sync-entitlements`
+  (or just `yarn start` / `yarn build` / `yarn build:release`, which run it automatically via
+  `pre*` hooks) regenerates it from the backend file. `purchases.js`
+  (`KITE_PREMIUM_ENTITLEMENT_ID`, `KITE_PREMIUM_PRODUCT_IDS`), `shopConstants.js`
+  (`RARITY_GATES`), and `PremiumContext.jsx`'s `initialStatus` all import from the generated file
+  instead of hardcoding literals. To add a new product, rename the entitlement, or add a new
+  rarity/progression tier: edit `backend/entitlements_config.json` only. (This replaced literals
+  duplicated across 4+ files by hand, which had been the source of most premium/IAP regressions
+  historically — see `backend/tests/test_kite_trivia.py`'s `entitlement_id` assertion for the
+  regression test that would have caught the old drift.)
+- Release builds for iOS/Android/TestFlight must go through `cd frontend && yarn build:release`
+  (never plain `yarn build`) — it strips any ambient `REACT_APP_BACKEND_URL` from the shell, builds
+  against the committed `frontend/.env.production`, and fails the build if the resulting bundle
+  doesn't embed a production HTTPS URL or contains a Google-Sign-In marker. See
+  `frontend/scripts/build-release.js`; this exists because a plain `yarn build` shipped a
+  developer's LAN dev URL (`http://192.168.0.24:8001`) to a physical-device build on 2026-09-05,
+  which iOS silently refused to reach at all (ATS blocks cleartext HTTP by default).
+
+## graphify
+
+This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
+
+Rules:
+- For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
+- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
+- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
+- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).

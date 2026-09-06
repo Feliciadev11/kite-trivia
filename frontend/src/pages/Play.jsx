@@ -13,6 +13,8 @@ import { ArrowLeft, ArrowRight, CheckCircle, XCircle, Sparkles, Home } from "luc
 import { SkyWandererCelebration } from "../components/SkyWandererCelebration";
 import { logError } from "../lib/logger";
 import { usePremium } from "../contexts/PremiumContext";
+import { classifyQuestionsError } from "../lib/questionsFetch";
+import { AlertCircle, RotateCcw } from "lucide-react";
 
 export default function PlayPage() {
   const navigate = useNavigate();
@@ -29,43 +31,51 @@ export default function PlayPage() {
   const [score, setScore] = useState({ correct: 0, total: 0 });
   const [milestones, setMilestones] = useState(null);
   const [freeGate, setFreeGate] = useState(null); // { rounds_played_today, free_rounds_per_day }
+  const [loadError, setLoadError] = useState(null); // { type, message } — retryable failure, not the free-tier gate
   const didFetchRef = useRef(false);
 
   const fetchQuestions = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
     try {
       const response = await axios.get(`${API}/questions`, {
         params: { limit: 10 },
         withCredentials: true
       });
       const questionsData = response?.data?.questions || response?.data;
-      setQuestions(Array.isArray(questionsData) ? questionsData : []);
+      const list = Array.isArray(questionsData) ? questionsData : [];
+      if (list.length === 0) {
+        // Successful response, but nothing to play — treat like any other
+        // failure to load rather than rendering a blank "Question 1 of 0" screen.
+        setLoadError({ type: "server_error", message: "No questions available right now. Please try again." });
+        return;
+      }
+      setQuestions(list);
       setFreeGate(null);
     } catch (error) {
-      // Free-tier daily cap: server returns 402 with a structured `detail`.
-      if (error?.response?.status === 402) {
-        const detail = error.response.data?.detail || {};
-        setFreeGate({
-          rounds_played_today: detail.rounds_played_today,
-          free_rounds_per_day: detail.free_rounds_per_day,
-          message: detail.message,
-        });
+      const classified = classifyQuestionsError(error);
+      // Structured logging — ensures WKWebView console shows the real
+      // failure instead of `[error] - {}`. Runs in production too.
+      const info = {
+        where: "Play.fetchQuestions",
+        classified: classified.type,
+        name: error?.name,
+        message: error?.message,
+        code: error?.code,
+        requestUrl: error?.config?.url,
+        responseStatus: error?.response?.status,
+        responseData: error?.response?.data,
+      };
+      // eslint-disable-next-line no-console
+      console.error("[Play.fetchQuestions]", JSON.stringify(info, null, 2));
+      logError("fetchQuestions failed", error);
+
+      if (classified.type === "free_tier_gate") {
+        setFreeGate(classified);
         refreshServerStatus?.();
       } else {
         toast.error("Failed to load questions");
-        // Structured logging — ensures WKWebView console shows the real
-        // failure instead of `[error] - {}`. Runs in production too.
-        const info = {
-          where: "Play.fetchQuestions",
-          name: error?.name,
-          message: error?.message,
-          code: error?.code,
-          requestUrl: error?.config?.url,
-          responseStatus: error?.response?.status,
-          responseData: error?.response?.data,
-        };
-        // eslint-disable-next-line no-console
-        console.error("[Play.fetchQuestions]", JSON.stringify(info, null, 2));
-        logError("fetchQuestions failed", error);
+        setLoadError(classified);
       }
     } finally {
       setLoading(false);
@@ -187,6 +197,46 @@ export default function PlayPage() {
               onClick={() => navigate("/dashboard")}
               className="rounded-full text-sky-600"
               data-testid="free-gate-back-btn"
+            >
+              <Home className="w-4 h-4 mr-2" />
+              Back to dashboard
+            </Button>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="min-h-screen sky-gradient flex items-center justify-center p-4" data-testid="questions-load-error">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.94 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.5, ease: "easeOut" }}
+          className="glass-card max-w-md w-full text-center p-8"
+        >
+          <div className="mx-auto w-16 h-16 rounded-full bg-amber-100 flex items-center justify-center mb-5">
+            <AlertCircle className="w-8 h-8 text-amber-500" />
+          </div>
+          <h2 className="text-2xl font-semibold text-sky-900 mb-2">
+            Couldn't load questions
+          </h2>
+          <p className="text-sky-600 mb-6">{loadError.message}</p>
+          <div className="flex flex-col gap-3">
+            <Button
+              onClick={fetchQuestions}
+              className="rounded-full bg-gradient-to-r from-sky-500 to-indigo-500 hover:from-sky-600 hover:to-indigo-600"
+              data-testid="questions-retry-btn"
+            >
+              <RotateCcw className="w-4 h-4 mr-2" />
+              Try Again
+            </Button>
+            <Button
+              variant="ghost"
+              onClick={() => navigate("/dashboard")}
+              className="rounded-full text-sky-600"
+              data-testid="questions-error-back-btn"
             >
               <Home className="w-4 h-4 mr-2" />
               Back to dashboard

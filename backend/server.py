@@ -13,10 +13,17 @@ from datetime import datetime, timezone, timedelta
 import bcrypt
 import httpx
 import random
+import json
 from questions_db import QUESTIONS
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
+
+# Single source of truth for RevenueCat identifiers + progression gates —
+# frontend/src/lib/entitlements.generated.json is a generated copy of this
+# same file (see frontend/scripts/sync-entitlements.js). Edit only this one.
+with open(ROOT_DIR / 'entitlements_config.json') as _f:
+    ENTITLEMENTS_CONFIG = json.load(_f)
 
 # MongoDB connection
 mongo_url = os.environ['MONGO_URL']
@@ -831,7 +838,7 @@ async def get_questions(
 # =========================================================================
 
 FREE_ROUNDS_PER_DAY = 3
-PREMIUM_ENTITLEMENT_ID = "Kite Premium"  # matches RevenueCat entitlement identifier
+PREMIUM_ENTITLEMENT_ID = ENTITLEMENTS_CONFIG["premium_entitlement_id"]  # matches RevenueCat entitlement identifier
 
 class PremiumSyncPayload(BaseModel):
     """Sent by the mobile client after RevenueCat state changes.
@@ -1090,18 +1097,9 @@ def xp_required_for_next_level(level: int) -> int:
 # applied on top of any per-item unlock_level — whichever is higher wins.
 # Designed to feel like discovery, not a paywall.
 PROGRESSIVE_GATES = {
-    ("kite", "common"): 3,
-    ("sky_theme", "common"): 4,
-    ("companion", "common"): 5,
-    ("kite", "rare"): 8,
-    ("sky_theme", "rare"): 9,
-    ("companion", "rare"): 10,
-    ("kite", "epic"): 14,
-    ("sky_theme", "epic"): 15,
-    ("companion", "epic"): 16,
-    ("kite", "legendary"): 20,
-    ("sky_theme", "legendary"): 20,
-    ("companion", "legendary"): 22,
+    (category, rarity): level
+    for category, rarities in ENTITLEMENTS_CONFIG["progressive_gates"].items()
+    for rarity, level in rarities.items()
 }
 
 def _effective_unlock_level(character: dict) -> int:

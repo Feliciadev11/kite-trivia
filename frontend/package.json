@@ -70,8 +70,12 @@
     "zod": "^3.24.4"
   },
   "scripts": {
+    "sync-entitlements": "node scripts/sync-entitlements.js",
+    "prestart": "yarn sync-entitlements",
+    "prebuild": "yarn sync-entitlements",
     "start": "craco start",
     "build": "craco build",
+    "build:release": "node scripts/build-release.js",
     "test": "craco test"
   },
   "browserslist": {

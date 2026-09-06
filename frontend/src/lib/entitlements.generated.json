@@ -1,0 +1,27 @@
+{
+  "_comment": "Single source of truth for RevenueCat entitlement/product identifiers and the progression unlock gates. backend/server.py reads this directly. frontend/src/lib/entitlements.generated.json is a generated copy — run `yarn sync-entitlements` in frontend/ (or just `yarn start`/`yarn build`, which do it automatically) after editing this file. Adding a new rarity tier, product, or renaming the entitlement only ever touches this one file.",
+  "premium_entitlement_id": "Kite Premium",
+  "premium_product_ids": {
+    "monthly": "monthly"
+  },
+  "progressive_gates": {
+    "kite": {
+      "common": 3,
+      "rare": 8,
+      "epic": 14,
+      "legendary": 20
+    },
+    "sky_theme": {
+      "common": 4,
+      "rare": 9,
+      "epic": 15,
+      "legendary": 20
+    },
+    "companion": {
+      "common": 5,
+      "rare": 10,
+      "epic": 16,
+      "legendary": 22
+    }
+  }
+}

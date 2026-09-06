@@ -38,7 +38,7 @@ const initialStatus = {
   free_rounds_per_day: 3,
   rounds_played_today: 0,
   rounds_remaining_today: 3,
-  entitlement_id: "Kite Premium",
+  entitlement_id: KITE_PREMIUM_ENTITLEMENT_ID,
 };
 
 export function PremiumProvider({ children }) {

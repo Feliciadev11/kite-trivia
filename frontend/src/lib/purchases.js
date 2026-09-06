@@ -15,6 +15,7 @@
  */
 import { Capacitor } from "@capacitor/core";
 import { logError } from "./logger";
+import ENTITLEMENTS from "./entitlements.generated.json";
 
 // -------------------- Config (edit here) --------------------
 // RevenueCat public SDK keys (safe to ship in the client). Grab them from
@@ -34,13 +35,12 @@ export const REVENUECAT_API_KEY_ANDROID =
 
 // The RevenueCat "entitlement" identifier — must match the exact identifier
 // configured in your RevenueCat dashboard. Case-sensitive, with a space.
-export const KITE_PREMIUM_ENTITLEMENT_ID = "Kite Premium";
+// Sourced from backend/entitlements_config.json (see that file to change it).
+export const KITE_PREMIUM_ENTITLEMENT_ID = ENTITLEMENTS.premium_entitlement_id;
 
 // Store product identifiers. Create these in App Store Connect (iOS) and
-// Google Play Console (Android). Currently monthly-only.
-export const KITE_PREMIUM_PRODUCT_IDS = {
-  monthly: "monthly",
-};
+// Google Play Console (Android). Sourced from backend/entitlements_config.json.
+export const KITE_PREMIUM_PRODUCT_IDS = ENTITLEMENTS.premium_product_ids;
 
 // -------------------- Runtime detection --------------------
 const IS_NATIVE = Capacitor.isNativePlatform();

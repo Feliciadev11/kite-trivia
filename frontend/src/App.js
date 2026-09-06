@@ -10,6 +10,11 @@ import { logError } from "./lib/logger";
 const SESSION_TOKEN_KEY = "session_token";
 const IS_NATIVE = Capacitor.isNativePlatform();
 
+// Without this, a dropped/blocked connection (bad Wi-Fi, ATS block, backend
+// down) hangs every request indefinitely — the caller's loading state never
+// resolves and the UI is stuck rather than showing a retryable error.
+axios.defaults.timeout = 20000;
+
 // Native-only: the SameSite=None session cookie doesn't always persist/reattach
 // reliably from a Capacitor WKWebView (cross-site relative to the API - see the
 // cookie comment in server.py). As a fallback, native builds also store the
