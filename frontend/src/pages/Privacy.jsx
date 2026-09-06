@@ -27,11 +27,10 @@ export default function PrivacyPage() {
 
       <h3>Account information</h3>
       <p>
-        When you create an account we store the email address and display name
-        you provide, together with a securely hashed password (we never store
-        or see your raw password). If you sign in with Google, we receive your
-        email address and public profile name from Google; we do not receive
-        your Google password.
+        You can play Kite, earn progress, and purchase Premium without
+        creating an account. If you choose to register, we store the email
+        address and display name you provide, together with a securely
+        hashed password (we never store or see your raw password).
       </p>
 
       <h3>Gameplay data</h3>
