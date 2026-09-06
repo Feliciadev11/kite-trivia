@@ -156,19 +156,23 @@ async def get_current_user(
     request: Request,
     session_token: Optional[str] = Cookie(default=None)
 ) -> User:
-    # Check cookie first, then Authorization header
-    token = session_token
-    if not token:
-        auth_header = request.headers.get("Authorization")
-        if auth_header and auth_header.startswith("Bearer "):
-            token = auth_header[7:]
-    
-    if not token:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    
-    # Find session
-    session_doc = await db.user_sessions.find_one({"session_token": token}, {"_id": 0})
+    # Try cookie, then Authorization header — a stale/invalid cookie must not
+    # block a valid Bearer token from being tried too.
+    auth_header = request.headers.get("Authorization", "")
+    bearer = auth_header[7:] if auth_header.startswith("Bearer ") else None
+
+    token, session_doc = None, None
+    for candidate in (session_token, bearer):
+        if not candidate:
+            continue
+        doc = await db.user_sessions.find_one({"session_token": candidate}, {"_id": 0})
+        if doc:
+            token, session_doc = candidate, doc
+            break
+
     if not session_doc:
+        if not (session_token or bearer):
+            raise HTTPException(status_code=401, detail="Not authenticated")
         raise HTTPException(status_code=401, detail="Invalid session")
     
     # Check expiry
