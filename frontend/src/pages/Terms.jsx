@@ -33,20 +33,23 @@ export default function TermsPage() {
 
       <h2>2. Your account</h2>
       <p>
-        To play Kite you create an account with an email address and
-        password, or sign in with Google. You are responsible for keeping
-        your credentials safe and for activity that happens under your
-        account. If you notice unauthorised access, please email us
-        promptly. You must be at least 13 years old (or the age of digital
-        consent in your country) to create an account, or use Kite with
-        the consent and supervision of a parent or guardian.
+        You can play Kite, progress through levels, and purchase Premium
+        without creating an account. If you choose to register - for example
+        to keep your progress and purchases when switching devices - you
+        create an account with an email address and password and are
+        responsible for keeping your credentials safe and for activity that
+        happens under your account. If you notice unauthorised access,
+        please email us promptly. You must be at least 13 years old (or the
+        age of digital consent in your country) to create an account, or use
+        Kite with the consent and supervision of a parent or guardian.
       </p>
 
       <h2>3. The free experience</h2>
       <p>
-        Anyone with a Kite account can play a limited number of rounds each
-        day at no cost, and can progress through XP, levels, milestones,
-        streaks, and the standard shop items unlocked by levelling up. The
+        Anyone playing Kite, with or without an account, can play a limited
+        number of rounds each day at no cost, and can progress through XP,
+        levels, milestones, streaks, and the standard shop items unlocked by
+        levelling up. The
         free experience is complete on its own — nothing in the game is
         strictly required to be purchased to keep playing.
       </p>

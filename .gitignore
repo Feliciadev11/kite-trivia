@@ -82,6 +82,10 @@ frontend/node_modules/.cache/default-development/0.pack
 .env
 .env.*
 *.env
+# Public production API base URL only (no secrets) — committed deliberately so
+# every release build uses the same value instead of whatever a developer's
+# shell happens to export. See frontend/scripts/build-release.js.
+!frontend/.env.production
 credentials.json
 *.key
 .credentials

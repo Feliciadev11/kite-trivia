@@ -1,11 +1,9 @@
-// Mirrors the backend PROGRESSIVE_GATES — used by the UI to render
-// "Unlocks at Level N" badges. Backend remains the source of truth for
-// purchase/equip enforcement.
-export const RARITY_GATES = {
-  kite:       { common: 3,  rare: 8,  epic: 14, legendary: 20 },
-  companion:  { common: 5,  rare: 10, epic: 16, legendary: 22 },
-  sky_theme:  { common: 4,  rare: 9,  epic: 15, legendary: 20 },
-};
+import ENTITLEMENTS from "../../lib/entitlements.generated.json";
+
+// Sourced from backend/entitlements_config.json (single source of truth) —
+// used by the UI to render "Unlocks at Level N" badges. Backend remains the
+// source of truth for purchase/equip *enforcement*, it just reads the same file.
+export const RARITY_GATES = ENTITLEMENTS.progressive_gates;
 
 export const RARITY_COLORS = {
   common:    { bg: "bg-slate-50",  border: "border-slate-200",  text: "text-slate-600",  badge: "bg-slate-200 text-slate-700" },

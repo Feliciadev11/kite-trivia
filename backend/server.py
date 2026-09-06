@@ -13,10 +13,17 @@ from datetime import datetime, timezone, timedelta
 import bcrypt
 import httpx
 import random
+import json
 from questions_db import QUESTIONS
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
+
+# Single source of truth for RevenueCat identifiers + progression gates —
+# frontend/src/lib/entitlements.generated.json is a generated copy of this
+# same file (see frontend/scripts/sync-entitlements.js). Edit only this one.
+with open(ROOT_DIR / 'entitlements_config.json') as _f:
+    ENTITLEMENTS_CONFIG = json.load(_f)
 
 # MongoDB connection
 mongo_url = os.environ['MONGO_URL']
@@ -61,9 +68,10 @@ class DeleteAccountRequest(BaseModel):
 class User(BaseModel):
     model_config = ConfigDict(extra="ignore")
     user_id: str
-    email: str
+    email: Optional[str] = None  # None for accounts created via /auth/anonymous
     name: str
     picture: Optional[str] = None
+    is_anonymous: bool = False
     coins: int = 0
     current_character: str = "basic_kite"
     current_companion: Optional[str] = None
@@ -155,19 +163,23 @@ async def get_current_user(
     request: Request,
     session_token: Optional[str] = Cookie(default=None)
 ) -> User:
-    # Check cookie first, then Authorization header
-    token = session_token
-    if not token:
-        auth_header = request.headers.get("Authorization")
-        if auth_header and auth_header.startswith("Bearer "):
-            token = auth_header[7:]
-    
-    if not token:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    
-    # Find session
-    session_doc = await db.user_sessions.find_one({"session_token": token}, {"_id": 0})
+    # Try cookie, then Authorization header — a stale/invalid cookie must not
+    # block a valid Bearer token from being tried too.
+    auth_header = request.headers.get("Authorization", "")
+    bearer = auth_header[7:] if auth_header.startswith("Bearer ") else None
+
+    token, session_doc = None, None
+    for candidate in (session_token, bearer):
+        if not candidate:
+            continue
+        doc = await db.user_sessions.find_one({"session_token": candidate}, {"_id": 0})
+        if doc:
+            token, session_doc = candidate, doc
+            break
+
     if not session_doc:
+        if not (session_token or bearer):
+            raise HTTPException(status_code=401, detail="Not authenticated")
         raise HTTPException(status_code=401, detail="Invalid session")
     
     # Check expiry
@@ -183,11 +195,26 @@ async def get_current_user(
     user_doc = await db.users.find_one({"user_id": session_doc["user_id"]}, {"_id": 0})
     if not user_doc:
         raise HTTPException(status_code=401, detail="User not found")
-    
+
+    # Sliding-window session refresh, anonymous accounts only: an active
+    # anonymous player's session keeps extending on every authenticated
+    # request so they never expire out from under active use, while an
+    # abandoned anonymous install's session just sits at its last-touched
+    # expiry and genuinely ages out (for the not-yet-built retention/prune
+    # job - see the migration plan doc's risk 4). Real accounts are
+    # unaffected: they keep the fixed expiry from login/register and are
+    # expected to log back in with their credentials, same as today.
+    if user_doc.get("is_anonymous"):
+        new_expiry = datetime.now(timezone.utc) + timedelta(days=7)
+        await db.user_sessions.update_one(
+            {"session_token": token},
+            {"$set": {"expires_at": new_expiry.isoformat()}},
+        )
+
     # Convert datetime if string
     if isinstance(user_doc.get("created_at"), str):
         user_doc["created_at"] = datetime.fromisoformat(user_doc["created_at"])
-    
+
     return User(**user_doc)
 
 def hash_password(password: str) -> str:
@@ -259,6 +286,69 @@ async def register(user_data: UserCreate, response: Response):
     )
     
     user_doc.pop("password_hash", None)
+    user_doc.pop("_id", None)
+    user_doc["created_at"] = now
+    user_doc["session_token"] = session_token
+    return User(**user_doc)
+
+@api_router.post("/auth/anonymous")
+async def create_anonymous_session(response: Response):
+    """Creates a backend account with no credentials (is_anonymous=True) and
+    issues a session, for a device with no existing session at all. Lets
+    gameplay (round-gating, leveling) and purchases work without requiring
+    registration, per Apple Guideline 5.1.1(v) - see
+    memory/anonymous-purchases-migration-plan.md. Called by AuthProvider's
+    checkAuth() only after a confirmed 401 from /auth/me (never on a network
+    error or 5xx), so a transient failure never spins up a spurious account.
+    """
+    user_id = f"user_{uuid.uuid4().hex[:12]}"
+    now = datetime.now(timezone.utc)
+
+    user_doc = {
+        "user_id": user_id,
+        "email": None,
+        "name": "Guest",
+        "is_anonymous": True,
+        "picture": None,
+        "coins": 0,
+        "current_character": "basic_kite",
+        "current_companion": None,
+        "current_sky_theme": "dawn",
+        "owned_characters": ["basic_kite"],
+        "owned_companions": [],
+        "owned_sky_themes": ["dawn"],
+        "level": 1,
+        "xp": 0,
+        "total_correct": 0,
+        "total_questions": 0,
+        "weekly_score": 0,
+        "login_streak": 0,
+        "last_login_date": None,
+        "total_rewards_claimed": 0,
+        "created_at": now.isoformat()
+    }
+
+    await db.users.insert_one(user_doc)
+
+    session_token = f"session_{uuid.uuid4().hex}"
+    session_doc = {
+        "user_id": user_id,
+        "session_token": session_token,
+        "expires_at": (now + timedelta(days=7)).isoformat(),
+        "created_at": now.isoformat()
+    }
+    await db.user_sessions.insert_one(session_doc)
+
+    response.set_cookie(
+        key="session_token",
+        value=session_token,
+        httponly=True,
+        secure=True,
+        samesite="none",
+        path="/",
+        max_age=7*24*60*60
+    )
+
     user_doc.pop("_id", None)
     user_doc["created_at"] = now
     user_doc["session_token"] = session_token
@@ -410,7 +500,12 @@ async def get_me(current_user: User = Depends(get_current_user)):
 
 @api_router.post("/auth/logout")
 async def logout(request: Request, response: Response):
-    session_token = request.cookies.get("session_token")
+    # Same dual lookup as get_current_user - on native the cookie may never
+    # have attached at all, so relying on it alone silently no-ops logout
+    # and leaves the Bearer-authenticated session valid indefinitely.
+    auth_header = request.headers.get("Authorization", "")
+    bearer = auth_header[7:] if auth_header.startswith("Bearer ") else None
+    session_token = request.cookies.get("session_token") or bearer
     if session_token:
         await db.user_sessions.delete_one({"session_token": session_token})
 
@@ -433,8 +528,19 @@ async def delete_account(
     even after account deletion.
     """
     user_doc = await db.users.find_one({"user_id": current_user.user_id}, {"_id": 0})
-    if not user_doc or not verify_password(payload.password, user_doc.get("password_hash", "")):
+    if not user_doc:
         raise HTTPException(status_code=401, detail="Incorrect password")
+
+    # Gated purely on whether a password_hash actually exists to check against -
+    # never on is_anonymous. Any account that has a password_hash set, anonymous-
+    # flagged or not, must still supply the correct password. Only an account with
+    # no password_hash at all (e.g. one that never had credentials set) has nothing
+    # to verify, so it can't be put through verify_password() without that raising
+    # (bcrypt.checkpw errors on an empty/missing hash rather than returning False).
+    password_hash = user_doc.get("password_hash")
+    if password_hash:
+        if not payload.password or not verify_password(payload.password, password_hash):
+            raise HTTPException(status_code=401, detail="Incorrect password")
 
     user_id = current_user.user_id
     await db.users.delete_one({"user_id": user_id})
@@ -732,7 +838,7 @@ async def get_questions(
 # =========================================================================
 
 FREE_ROUNDS_PER_DAY = 3
-PREMIUM_ENTITLEMENT_ID = "Kite Premium"  # matches RevenueCat entitlement identifier
+PREMIUM_ENTITLEMENT_ID = ENTITLEMENTS_CONFIG["premium_entitlement_id"]  # matches RevenueCat entitlement identifier
 
 class PremiumSyncPayload(BaseModel):
     """Sent by the mobile client after RevenueCat state changes.
@@ -991,18 +1097,9 @@ def xp_required_for_next_level(level: int) -> int:
 # applied on top of any per-item unlock_level — whichever is higher wins.
 # Designed to feel like discovery, not a paywall.
 PROGRESSIVE_GATES = {
-    ("kite", "common"): 3,
-    ("sky_theme", "common"): 4,
-    ("companion", "common"): 5,
-    ("kite", "rare"): 8,
-    ("sky_theme", "rare"): 9,
-    ("companion", "rare"): 10,
-    ("kite", "epic"): 14,
-    ("sky_theme", "epic"): 15,
-    ("companion", "epic"): 16,
-    ("kite", "legendary"): 20,
-    ("sky_theme", "legendary"): 20,
-    ("companion", "legendary"): 22,
+    (category, rarity): level
+    for category, rarities in ENTITLEMENTS_CONFIG["progressive_gates"].items()
+    for rarity, level in rarities.items()
 }
 
 def _effective_unlock_level(character: dict) -> int:

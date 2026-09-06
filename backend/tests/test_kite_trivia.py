@@ -28,6 +28,12 @@ def client(session_user):
     s.headers.update({"Content-Type": "application/json"})
     r = s.post(f"{API}/auth/register", json=session_user)
     assert r.status_code == 200, f"register failed: {r.status_code} {r.text}"
+    # The session_token cookie is Secure - fine over the real HTTPS preview
+    # domain this suite defaults to, but `requests` won't send it back over a
+    # plain http:// local server. Bearer is the native app's own fallback for
+    # exactly this (see get_current_user) - use it so the suite is runnable
+    # against a local server too.
+    s.headers.update({"Authorization": f"Bearer {r.json()['session_token']}"})
     user_id = s.get(f"{API}/auth/me").json()["user_id"]
 
     # Mark the test user as premium so gameplay tests aren't blocked by the
@@ -76,6 +82,7 @@ def test_register_and_me(session_user):
     assert r.status_code == 200, r.text
     body = r.json()
     assert "user_id" in body or "user" in body or "id" in body
+    s.headers.update({"Authorization": f"Bearer {body['session_token']}"})
 
     me = s.get(f"{API}/auth/me")
     assert me.status_code == 200
@@ -91,6 +98,7 @@ def test_login_existing(client, session_user):
         "password": session_user["password"],
     })
     assert r.status_code == 200, r.text
+    s.headers.update({"Authorization": f"Bearer {r.json()['session_token']}"})
     me = s.get(f"{API}/auth/me")
     assert me.status_code == 200
     assert me.json().get("email") == session_user["email"].lower()
@@ -534,6 +542,7 @@ def test_purchased_item_ownership_persists_across_logout_and_new_login_session()
     s1.headers.update({"Content-Type": "application/json"})
     r = s1.post(f"{API}/auth/register", json={"email": email, "password": password, "name": "Persist"})
     assert r.status_code == 200, r.text
+    s1.headers.update({"Authorization": f"Bearer {r.json()['session_token']}"})
     user_id = s1.get(f"{API}/auth/me").json()["user_id"]
 
     item, skip_reason = _grant_purchased_item_via_webhook(user_id, "_persist")
@@ -553,6 +562,7 @@ def test_purchased_item_ownership_persists_across_logout_and_new_login_session()
     s2.headers.update({"Content-Type": "application/json"})
     login = s2.post(f"{API}/auth/login", json={"email": email, "password": password})
     assert login.status_code == 200, login.text
+    s2.headers.update({"Authorization": f"Bearer {login.json()['session_token']}"})
 
     me2 = s2.get(f"{API}/auth/me").json()
     owned2 = set(me2.get("owned_characters", []) + me2.get("owned_companions", []) + me2.get("owned_sky_themes", []))
@@ -571,9 +581,10 @@ def test_purchased_item_ownership_does_not_leak_between_users():
 
     a = requests.Session()
     a.headers.update({"Content-Type": "application/json"})
-    a.post(f"{API}/auth/register", json={
+    r_a = a.post(f"{API}/auth/register", json={
         "email": f"TEST_leak_a_{ts}@example.com", "password": "DreamySky123!", "name": "A",
     })
+    a.headers.update({"Authorization": f"Bearer {r_a.json()['session_token']}"})
     user_id_a = a.get(f"{API}/auth/me").json()["user_id"]
 
     item, skip_reason = _grant_purchased_item_via_webhook(user_id_a, "_leak")
@@ -582,9 +593,10 @@ def test_purchased_item_ownership_does_not_leak_between_users():
 
     b = requests.Session()
     b.headers.update({"Content-Type": "application/json"})
-    b.post(f"{API}/auth/register", json={
+    r_b = b.post(f"{API}/auth/register", json={
         "email": f"TEST_leak_b_{ts}@example.com", "password": "DreamySky123!", "name": "B",
     })
+    b.headers.update({"Authorization": f"Bearer {r_b.json()['session_token']}"})
     me_b = b.get(f"{API}/auth/me").json()
     owned_b = set(me_b.get("owned_characters", []) + me_b.get("owned_companions", []) + me_b.get("owned_sky_themes", []))
     assert item["character_id"] not in owned_b, (
@@ -902,7 +914,8 @@ def test_session_exchange_endpoint_uses_samesite_none_in_source():
     that native-app auth stays consistent across all three cookie-setting paths.
     """
     import re
-    with open("/app/backend/server.py", "r") as f:
+    server_path = os.path.join(os.path.dirname(__file__), "..", "server.py")
+    with open(server_path, "r") as f:
         src = f.read()
     # find all samesite= arguments
     matches = re.findall(r'samesite\s*=\s*["\']([a-zA-Z]+)["\']', src)
@@ -925,6 +938,7 @@ def test_free_tier_gate_blocks_after_daily_cap():
     email = f"TEST_free_{ts}@example.com"
     r = s.post(f"{API}/auth/register", json={"email": email, "password": "DreamySky123!", "name": "F"})
     assert r.status_code == 200
+    s.headers.update({"Authorization": f"Bearer {r.json()['session_token']}"})
 
     # Play the allowed budget
     for i in range(3):
@@ -959,6 +973,7 @@ def test_seeded_premium_bypasses_free_tier_gate():
         "name": "P",
     })
     assert r.status_code == 200
+    s.headers.update({"Authorization": f"Bearer {r.json()['session_token']}"})
     user_id = s.get(f"{API}/auth/me").json()["user_id"]
 
     # Exhaust free budget
@@ -1001,6 +1016,7 @@ def test_premium_sync_rejects_spoofed_payload():
         "name": "Sp",
     })
     assert r.status_code == 200
+    s.headers.update({"Authorization": f"Bearer {r.json()['session_token']}"})
 
     spoof = s.post(f"{API}/premium/sync", json={
         "entitlement_active": True,
@@ -1027,11 +1043,12 @@ def test_premium_status_shape():
     ts = int(time.time() * 1000)
     s = requests.Session()
     s.headers.update({"Content-Type": "application/json"})
-    s.post(f"{API}/auth/register", json={
+    reg = s.post(f"{API}/auth/register", json={
         "email": f"TEST_prem_status_{ts}@example.com",
         "password": "DreamySky123!",
         "name": "S",
     })
+    s.headers.update({"Authorization": f"Bearer {reg.json()['session_token']}"})
     r = s.get(f"{API}/premium/status")
     assert r.status_code == 200
     body = r.json()
@@ -1057,11 +1074,12 @@ def test_premium_sync_downgrades_previously_seeded_premium():
     ts = int(time.time() * 1000)
     s = requests.Session()
     s.headers.update({"Content-Type": "application/json"})
-    s.post(f"{API}/auth/register", json={
+    reg = s.post(f"{API}/auth/register", json={
         "email": f"TEST_prem_down_{ts}@example.com",
         "password": "DreamySky123!",
         "name": "D",
     })
+    s.headers.update({"Authorization": f"Bearer {reg.json()['session_token']}"})
     user_id = s.get(f"{API}/auth/me").json()["user_id"]
 
     from pymongo import MongoClient

@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useState } from "rea
 import axios from "axios";
 import { API, useAuth } from "../App";
 import { logError } from "../lib/logger";
+import { bootPremium } from "../lib/premiumBoot";
 import {
   initPurchases,
   getCustomerInfo,
@@ -37,11 +38,11 @@ const initialStatus = {
   free_rounds_per_day: 3,
   rounds_played_today: 0,
   rounds_remaining_today: 3,
-  entitlement_id: "Kite Premium",
+  entitlement_id: KITE_PREMIUM_ENTITLEMENT_ID,
 };
 
 export function PremiumProvider({ children }) {
-  const { user, refreshUser } = useAuth();
+  const { user, loading: authLoading, refreshUser } = useAuth();
   const [status, setStatus] = useState(initialStatus);
   const [loading, setLoading] = useState(true);
   const [purchasing, setPurchasing] = useState(false);
@@ -84,36 +85,36 @@ export function PremiumProvider({ children }) {
 
   // -------- Boot: init SDK, load current entitlement, load offerings --------
   useEffect(() => {
-    // Skip boot until the user is authenticated. This prevents a stray 401
-    // console error from firing /api/premium/status before login.
-    if (!user?.user_id) {
-      setLoading(false);
-      setStatus(initialStatus);
-      return undefined;
-    }
     let alive = true;
     (async () => {
       setLoading(true);
       const native = isPurchasesAvailable();
       setServicesAvailable(native);
 
-      if (native) {
-        const initResult = await initPurchases(user.user_id);
-        if (!initResult.ok) {
-          logError("initPurchases", initResult.reason);
-        } else {
-          const info = await getCustomerInfo();
-          if (info.ok) await _pushEntitlementToServer(info);
-          const off = await getOfferings();
-          if (alive) setOfferings(off);
-        }
+      const result = await bootPremium({
+        authLoading,
+        userId: user?.user_id,
+        isNative: native,
+        initPurchases,
+        getCustomerInfo,
+        pushEntitlementToServer: _pushEntitlementToServer,
+        getOfferings,
+        refreshServerStatus,
+      });
+
+      if (!alive) return;
+      if (result.skipped) {
+        // Still waiting on AuthProvider's own /auth/me check - do nothing yet,
+        // including no loading-state flip, so nothing renders a premature
+        // "not premium" state while that's still unresolved.
+        return;
       }
-      const server = await refreshServerStatus();
-      if (alive && server) setStatus(server);
-      if (alive) setLoading(false);
+      if (result.offerings) setOfferings(result.offerings);
+      if (result.server) setStatus(result.server);
+      setLoading(false);
     })();
     return () => { alive = false; };
-  }, [user?.user_id, _pushEntitlementToServer, refreshServerStatus]);
+  }, [authLoading, user?.user_id, _pushEntitlementToServer, refreshServerStatus]);
 
   // -------- Purchase --------
   const purchase = useCallback(async (which /* "monthly" */) => {

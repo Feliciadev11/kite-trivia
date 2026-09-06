@@ -21,6 +21,9 @@ def fresh_user_session():
         timeout=20,
     )
     assert resp.status_code == 200, f"register failed: {resp.status_code} {resp.text}"
+    # Secure cookie won't attach over a plain http:// local server - use the
+    # native app's own Bearer fallback (see get_current_user in server.py).
+    session.headers.update({"Authorization": f"Bearer {resp.json()['session_token']}"})
     # Confirm cookie set + /auth/me works
     me = session.get(f"{API}/auth/me", timeout=10)
     assert me.status_code == 200, f"/auth/me failed: {me.status_code} {me.text}"

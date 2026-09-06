@@ -10,6 +10,11 @@ import { logError } from "./lib/logger";
 const SESSION_TOKEN_KEY = "session_token";
 const IS_NATIVE = Capacitor.isNativePlatform();
 
+// Without this, a dropped/blocked connection (bad Wi-Fi, ATS block, backend
+// down) hangs every request indefinitely — the caller's loading state never
+// resolves and the UI is stuck rather than showing a retryable error.
+axios.defaults.timeout = 20000;
+
 // Native-only: the SameSite=None session cookie doesn't always persist/reattach
 // reliably from a Capacitor WKWebView (cross-site relative to the API - see the
 // cookie comment in server.py). As a fallback, native builds also store the
@@ -84,7 +89,29 @@ export const AuthProvider = ({ children }) => {
       });
       setUser(response.data);
     } catch (error) {
-      setUser(null);
+      if (error?.response?.status === 401) {
+        // No existing session (not a network/server error) - create an
+        // anonymous one so gameplay/purchases work without requiring
+        // registration (Apple Guideline 5.1.1(v)). See
+        // memory/anonymous-purchases-migration-plan.md.
+        try {
+          const anon = await axios.post(`${API}/auth/anonymous`, {}, {
+            withCredentials: true
+          });
+          if (IS_NATIVE && anon.data?.session_token) {
+            await SecureStorage.setItem(SESSION_TOKEN_KEY, anon.data.session_token);
+          }
+          setUser(anon.data);
+        } catch (anonError) {
+          logError("Failed to create anonymous session", anonError);
+          setUser(null);
+        }
+      } else {
+        // Network error, 5xx, etc. - don't spin up a new anonymous account
+        // for what might be a transient failure on an otherwise-valid
+        // session.
+        setUser(null);
+      }
     } finally {
       setLoading(false);
     }
