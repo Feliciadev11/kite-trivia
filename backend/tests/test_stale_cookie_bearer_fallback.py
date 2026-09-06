@@ -26,3 +26,28 @@ def test_stale_cookie_does_not_block_valid_bearer():
     )
     assert r.status_code == 200, r.text
     assert r.json()["user_id"] == reg["user_id"]
+
+
+def test_logout_invalidates_bearer_only_session():
+    """logout() must resolve the session the same way get_current_user does -
+    a native client that only ever sent Bearer (cookie never attached from the
+    WKWebView) must still actually get logged out server-side, not silently
+    keep a live session forever."""
+    ts = int(time.time() * 1000)
+    reg = requests.post(f"{API}/auth/register", json={
+        "email": f"test_bearerlogout_{ts}@example.com",
+        "password": "DreamySky123!",
+        "name": "Bearer Logout Test",
+    }).json()
+    token = reg["session_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    assert requests.get(f"{API}/auth/me", headers=headers).status_code == 200
+
+    logout = requests.post(f"{API}/auth/logout", headers=headers)
+    assert logout.status_code == 200, logout.text
+
+    after = requests.get(f"{API}/auth/me", headers=headers)
+    assert after.status_code == 401, (
+        f"VULNERABILITY: Bearer-only session still valid after logout (got {after.status_code})"
+    )

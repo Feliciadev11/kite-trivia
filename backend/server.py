@@ -493,7 +493,12 @@ async def get_me(current_user: User = Depends(get_current_user)):
 
 @api_router.post("/auth/logout")
 async def logout(request: Request, response: Response):
-    session_token = request.cookies.get("session_token")
+    # Same dual lookup as get_current_user - on native the cookie may never
+    # have attached at all, so relying on it alone silently no-ops logout
+    # and leaves the Bearer-authenticated session valid indefinitely.
+    auth_header = request.headers.get("Authorization", "")
+    bearer = auth_header[7:] if auth_header.startswith("Bearer ") else None
+    session_token = request.cookies.get("session_token") or bearer
     if session_token:
         await db.user_sessions.delete_one({"session_token": session_token})
 
