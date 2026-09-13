@@ -10,8 +10,10 @@ import { API } from "../App";
 import { toast } from "sonner";
 import { extractErrorMessage } from "../lib/errors";
 import { Mail, Lock, ArrowLeft, Key, Copy, Check } from "lucide-react";
+import { useCanonical } from "../hooks/useCanonical";
 
 export default function ForgotPasswordPage() {
+  useCanonical("/forgot-password");
   const navigate = useNavigate();
   const [step, setStep] = useState(1); // 1 = enter email, 2 = enter code + new password
   const [email, setEmail] = useState("");

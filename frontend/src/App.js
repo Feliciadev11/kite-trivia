@@ -43,6 +43,7 @@ import { SignupPage } from "./pages/Signup";
 import { ForgotPasswordPage } from "./pages/ForgotPassword";
 import { PrivacyPage } from "./pages/Privacy";
 import { TermsPage } from "./pages/Terms";
+import { NotFoundPage } from "./pages/NotFound";
 import { DashboardPage } from "./pages/Dashboard";
 import { PlayPage } from "./pages/Play";
 import { ShopPage } from "./pages/Shop";
@@ -88,6 +89,7 @@ export const AuthProvider = ({ children }) => {
         withCredentials: true
       });
       setUser(response.data);
+      return response.data;
     } catch (error) {
       if (error?.response?.status === 401) {
         // No existing session (not a network/server error) - create an
@@ -102,15 +104,18 @@ export const AuthProvider = ({ children }) => {
             await SecureStorage.setItem(SESSION_TOKEN_KEY, anon.data.session_token);
           }
           setUser(anon.data);
+          return anon.data;
         } catch (anonError) {
           logError("Failed to create anonymous session", anonError);
           setUser(null);
+          throw anonError;
         }
       } else {
         // Network error, 5xx, etc. - don't spin up a new anonymous account
         // for what might be a transient failure on an otherwise-valid
         // session.
         setUser(null);
+        throw error;
       }
     } finally {
       setLoading(false);
@@ -118,7 +123,10 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   useEffect(() => {
-    checkAuth();
+    // Swallow here: mount-time auth resolution has nowhere to surface a
+    // rejection. Callers that need to react to failure (e.g. a manual
+    // "continue" action) should await checkAuth()/ensureSession() directly.
+    checkAuth().catch(() => {});
   }, [checkAuth]);
 
   const login = async (email, password) => {
@@ -200,7 +208,7 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, setUser, loading, login, register, logout, deleteAccount, refreshUser, exchangeSessionId }}>
+    <AuthContext.Provider value={{ user, setUser, loading, login, register, logout, deleteAccount, refreshUser, exchangeSessionId, ensureSession: checkAuth }}>
       {children}
     </AuthContext.Provider>
   );
@@ -333,7 +341,7 @@ const AppRouter = () => {
           <SettingsPage />
         </ProtectedRoute>
       } />
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route path="*" element={<NotFoundPage />} />
     </Routes>
   );
 };

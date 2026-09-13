@@ -40,7 +40,9 @@ export const LegalLayout = ({ title, subtitle, lastUpdated, children }) => (
         </div>
       </div>
 
-      <footer className="text-center mt-8 text-sky-500 text-sm">
+      <footer className="text-center mt-8 text-sky-500 text-sm" data-testid="site-footer">
+        <a href="mailto:kitetriviaapp@gmail.com" className="hover:text-sky-700 mx-2" data-testid="footer-contact-link">kitetriviaapp@gmail.com</a>
+        <span>·</span>
         <Link to="/privacy" className="hover:text-sky-700 mx-2">Privacy Policy</Link>
         <span>·</span>
         <Link to="/terms" className="hover:text-sky-700 mx-2">Terms of Service</Link>

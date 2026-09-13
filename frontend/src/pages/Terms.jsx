@@ -1,4 +1,5 @@
 import { LegalLayout } from "../components/LegalLayout";
+import { useCanonical } from "../hooks/useCanonical";
 
 const LAST_UPDATED = "February 17, 2026";
 const CONTACT_EMAIL = "kitetriviaapp@gmail.com";
@@ -9,6 +10,7 @@ const CONTACT_EMAIL = "kitetriviaapp@gmail.com";
  * Apple/Google cancellation flows, acceptable use, IP, and liability.
  */
 export default function TermsPage() {
+  useCanonical("/terms");
   return (
     <LegalLayout
       title="Terms of Service"

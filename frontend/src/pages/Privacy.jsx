@@ -1,4 +1,5 @@
 import { LegalLayout } from "../components/LegalLayout";
+import { useCanonical } from "../hooks/useCanonical";
 
 const LAST_UPDATED = "February 17, 2026";
 const CONTACT_EMAIL = "kitetriviaapp@gmail.com";
@@ -9,6 +10,7 @@ const CONTACT_EMAIL = "kitetriviaapp@gmail.com";
  * and Google Play Data Safety declarations. Covers RevenueCat subscriptions.
  */
 export default function PrivacyPage() {
+  useCanonical("/privacy");
   return (
     <LegalLayout
       title="Privacy Policy"

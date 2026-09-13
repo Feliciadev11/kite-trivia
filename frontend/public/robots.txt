@@ -1,0 +1,13 @@
+User-agent: *
+Disallow: /dashboard
+Disallow: /play
+Disallow: /leaderboard
+Disallow: /profile
+Disallow: /settings
+Disallow: /shop
+Disallow: /login
+Disallow: /signup
+Disallow: /forgot-password
+Allow: /
+
+Sitemap: https://kite-trivia-quest.emergent.host/sitemap.xml

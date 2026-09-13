@@ -3,17 +3,43 @@ import { motion } from "framer-motion";
 import { Button } from "../components/ui/button";
 import { useAuth } from "../App";
 import { Play, Trophy, ShoppingBag, Sparkles } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
+import { extractErrorMessage } from "../lib/errors";
+import { useCanonical } from "../hooks/useCanonical";
 
 export default function LandingPage() {
+  useCanonical("/");
   const navigate = useNavigate();
-  const { user, loading } = useAuth();
+  const { user, loading, ensureSession } = useAuth();
+  const [guestLoading, setGuestLoading] = useState(false);
 
   useEffect(() => {
-    if (!loading && user) {
+    // Anonymous sessions are created automatically on boot (see App.js
+    // checkAuth) so gameplay/purchases work without registration - but that
+    // means `user` is truthy for nearly every visitor. Only bounce people
+    // who are actually signed in; anonymous visitors should still see the
+    // landing page and choose "Continue as Guest" themselves.
+    if (!loading && user && !user.is_anonymous) {
       navigate('/dashboard');
     }
   }, [user, loading, navigate]);
+
+  const handleGuest = async () => {
+    if (user) {
+      navigate('/dashboard');
+      return;
+    }
+    setGuestLoading(true);
+    try {
+      await ensureSession();
+      navigate('/dashboard');
+    } catch (error) {
+      toast.error(extractErrorMessage(error, "Couldn't start a guest session"));
+    } finally {
+      setGuestLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen sky-gradient overflow-hidden relative" data-testid="landing-page">
@@ -87,6 +113,23 @@ export default function LandingPage() {
               >
                 Sign In
               </Button>
+            </motion.div>
+
+            <motion.div
+              className="mt-4 flex justify-center lg:justify-start"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.5 }}
+            >
+              <button
+                type="button"
+                onClick={handleGuest}
+                disabled={guestLoading}
+                className="text-sky-600 hover:text-sky-800 hover:underline text-sm font-medium disabled:opacity-50"
+                data-testid="continue-as-guest-btn"
+              >
+                {guestLoading ? "Starting…" : "Continue as Guest"}
+              </button>
             </motion.div>
 
             {/* Feature Pills */}
@@ -184,6 +227,8 @@ export default function LandingPage() {
       <div className="absolute bottom-4 left-0 right-0 text-center text-sky-500 text-sm">
         <div>Start with easy 5th grade questions and level up!</div>
         <div className="mt-1 text-xs text-sky-400">
+          <a href="mailto:kitetriviaapp@gmail.com" className="hover:text-sky-700 mx-2" data-testid="footer-contact-link">kitetriviaapp@gmail.com</a>
+          <span>·</span>
           <a href="/privacy" className="hover:text-sky-700 mx-2" data-testid="footer-privacy-link">Privacy</a>
           <span>·</span>
           <a href="/terms" className="hover:text-sky-700 mx-2" data-testid="footer-terms-link">Terms</a>

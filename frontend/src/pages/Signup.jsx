@@ -8,8 +8,10 @@ import { useAuth } from "../App";
 import { toast } from "sonner";
 import { extractErrorMessage } from "../lib/errors";
 import { Mail, Lock, User, ArrowRight } from "lucide-react";
+import { useCanonical } from "../hooks/useCanonical";
 
 export default function SignupPage() {
+  useCanonical("/signup");
   const navigate = useNavigate();
   const { register } = useAuth();
   const [name, setName] = useState("");
