@@ -24,7 +24,7 @@ const RARITY_TINT = {
 };
 
 // Falling petal confetti — soft, slow, gentle
-const PetalConfetti = ({ count = 18 }) => (
+export const PetalConfetti = ({ count = 18 }) => (
   <>
     {Array.from({ length: count }).map((_, i) => {
       const left = Math.random() * 100;

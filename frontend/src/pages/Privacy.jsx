@@ -54,17 +54,11 @@ export default function PrivacyPage() {
         purchase with Apple/Google, tells our servers whether your
         subscription is active, and sends purchase-lifecycle events (started,
         renewed, cancelled, expired). We record the resulting entitlement
-        state (active/inactive), the product identifier you purchased
-        (lifetime, yearly, or monthly), and the expiration date if applicable.
-        Web purchases (if used) are processed by Stripe, Inc., which
-        similarly handles card data on our behalf. For more information see
-        the{" "}
+        state (active/inactive), the monthly product identifier you
+        purchased, and the expiration date if applicable. For more
+        information see the{" "}
         <a href="https://www.revenuecat.com/privacy" target="_blank" rel="noopener noreferrer">
           RevenueCat privacy policy
-        </a>{" "}
-        and the{" "}
-        <a href="https://stripe.com/privacy" target="_blank" rel="noopener noreferrer">
-          Stripe privacy policy
         </a>
         .
       </p>
@@ -79,13 +73,22 @@ export default function PrivacyPage() {
 
       <h3>Analytics</h3>
       <p>
-        We use aggregated, non-identifying analytics to understand which
-        parts of the app people enjoy (for example, how many rounds are
-        played, which sky themes are most popular). Where our analytics
-        provider assigns any identifier that could be linked to you, we
-        treat it as personal data covered by this policy. We do not use
-        analytics for advertising and we do not share individualised data
-        with advertising networks.
+        On the web version of Kite only (not inside the iOS/Android app), we
+        use{" "}
+        <a href="https://plausible.io" target="_blank" rel="noopener noreferrer">
+          Plausible Analytics
+        </a>{" "}
+        to see aggregate traffic — which pages are visited and roughly how
+        many people visit. Plausible does not use cookies, does not collect
+        or store IP addresses or any other personal data, and cannot identify
+        you or follow you across other websites. It only runs after you
+        accept it in the banner shown on your first visit; declining or
+        ignoring the banner means it never loads. See{" "}
+        <a href="https://plausible.io/privacy" target="_blank" rel="noopener noreferrer">
+          Plausible&rsquo;s own privacy policy
+        </a>{" "}
+        for details. We do not use analytics for advertising, and we have no
+        individualised data to share because Plausible does not generate any.
       </p>
 
       <h2>2. How we use your information</h2>
@@ -122,8 +125,9 @@ export default function PrivacyPage() {
           your entitlement can be linked to your account.
         </li>
         <li>
-          <strong>Stripe, Inc.</strong> — processes web purchases if you use
-          the browser version of the app.
+          <strong>Plausible Analytics</strong> — on the web version only, and
+          only after you accept the analytics banner. Plausible receives no
+          personal data or cookies from us — see the Analytics section above.
         </li>
         <li>
           <strong>Cloud infrastructure providers</strong> that host our

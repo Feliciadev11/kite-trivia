@@ -140,13 +140,6 @@ export default function TermsPage() {
         original purchase.
       </p>
 
-      <h3>4.6 Web purchases</h3>
-      <p>
-        Where Kite offers browser-based purchases, they are processed by
-        Stripe, Inc., and are subject to the same non-refund policy in
-        section 4.3 unless required by law.
-      </p>
-
       <h2>5. Acceptable use</h2>
       <p>Kite is a calm place. Please don&rsquo;t use it to:</p>
       <ul>

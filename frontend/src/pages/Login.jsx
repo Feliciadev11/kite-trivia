@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
+import { FormError } from "../components/ui/form-error";
 import { useAuth } from "../App";
 import { toast } from "sonner";
 import { extractErrorMessage } from "../lib/errors";
@@ -17,17 +18,21 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [formError, setFormError] = useState("");
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
+    setFormError("");
 
     try {
       await login(email, password);
       toast.success("Welcome back!");
       navigate('/dashboard');
     } catch (error) {
-      toast.error(extractErrorMessage(error, "Login failed"));
+      const message = extractErrorMessage(error, "Login failed");
+      setFormError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -78,6 +83,8 @@ export default function LoginPage() {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-5">
+              <FormError id="login-form-error" message={formError} />
+
               <div>
                 <Label htmlFor="email" className="text-sky-700">Email</Label>
                 <div className="relative mt-1">
@@ -86,10 +93,13 @@ export default function LoginPage() {
                     id="email"
                     type="email"
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    onChange={(e) => { setEmail(e.target.value); setFormError(""); }}
                     placeholder="you@example.com"
                     className="pl-10 rounded-2xl border-sky-100 bg-white/50 focus:bg-white focus:ring-2 focus:ring-sky-400"
+                    autoComplete="username"
                     required
+                    aria-invalid={!!formError}
+                    aria-describedby={formError ? "login-form-error" : undefined}
                     data-testid="email-input"
                   />
                 </div>
@@ -103,10 +113,13 @@ export default function LoginPage() {
                     id="password"
                     type="password"
                     value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    onChange={(e) => { setPassword(e.target.value); setFormError(""); }}
                     placeholder="Enter your password"
                     className="pl-10 rounded-2xl border-sky-100 bg-white/50 focus:bg-white focus:ring-2 focus:ring-sky-400"
+                    autoComplete="current-password"
                     required
+                    aria-invalid={!!formError}
+                    aria-describedby={formError ? "login-form-error" : undefined}
                     data-testid="password-input"
                   />
                 </div>

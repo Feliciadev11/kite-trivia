@@ -6,9 +6,18 @@ import { Capacitor } from "@capacitor/core";
 import { SecureStorage } from "@aparajita/capacitor-secure-storage";
 import { Toaster, toast } from "sonner";
 import { logError } from "./lib/logger";
+import { getAnalyticsConsent, loadPlausible } from "./lib/analytics";
+import { AnalyticsConsent } from "./components/AnalyticsConsent";
 
 const SESSION_TOKEN_KEY = "session_token";
 const IS_NATIVE = Capacitor.isNativePlatform();
+
+// Web only, and only once the visitor has already accepted (returning
+// visit) — first-time visitors get the banner instead, which loads
+// Plausible itself on "Accept" (see components/AnalyticsConsent.jsx).
+if (!IS_NATIVE && getAnalyticsConsent() === "accepted") {
+  loadPlausible();
+}
 
 // Without this, a dropped/blocked connection (bad Wi-Fi, ATS block, backend
 // down) hangs every request indefinitely — the caller's loading state never
@@ -350,6 +359,7 @@ function App() {
   return (
     <div className="App">
       <Toaster position="top-center" richColors />
+      {!IS_NATIVE && <AnalyticsConsent />}
       <BrowserRouter>
         <AudioProvider>
           <SkySplash />

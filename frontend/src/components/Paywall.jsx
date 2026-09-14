@@ -4,6 +4,7 @@ import { Check, Loader2, Sparkles, Infinity as InfinityIcon, Palette, Heart } fr
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "./ui/dialog";
 import { Button } from "./ui/button";
 import { usePremium } from "../contexts/PremiumContext";
+import { PurchaseCelebration } from "./PurchaseCelebration";
 import { toast } from "sonner";
 
 const BENEFITS = [
@@ -26,6 +27,7 @@ export const Paywall = () => {
   } = usePremium();
 
   const [selected] = useState("monthly");
+  const [celebrating, setCelebrating] = useState(false);
 
   const monthly = offerings?.packages?.monthly;
 
@@ -38,8 +40,8 @@ export const Paywall = () => {
   const handlePurchase = async () => {
     const result = await purchase(selected);
     if (result.ok) {
-      toast.success("The full sky is open. Thank you for supporting Kite ✨");
       closePaywall();
+      setCelebrating(true);
       return;
     }
     if (result.canceled) {
@@ -73,6 +75,8 @@ export const Paywall = () => {
   };
 
   return (
+    <>
+    <PurchaseCelebration active={celebrating} onDismiss={() => setCelebrating(false)} />
     <Dialog open={paywallOpen} onOpenChange={(o) => !o && !purchasing && closePaywall()}>
       <DialogContent
         className="sm:max-w-md p-0 overflow-hidden bg-gradient-to-b from-sky-50 via-white to-sky-100 border-sky-200"
@@ -187,6 +191,7 @@ export const Paywall = () => {
         )}
       </DialogContent>
     </Dialog>
+    </>
   );
 };
 

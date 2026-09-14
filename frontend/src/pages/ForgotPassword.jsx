@@ -6,6 +6,7 @@ import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Card } from "../components/ui/card";
+import { FormError } from "../components/ui/form-error";
 import { API } from "../App";
 import { toast } from "sonner";
 import { extractErrorMessage } from "../lib/errors";
@@ -24,10 +25,12 @@ export default function ForgotPasswordPage() {
   const [expiresIn, setExpiresIn] = useState(0);
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [formError, setFormError] = useState("");
 
   const handleRequestCode = async (e) => {
     e.preventDefault();
     setLoading(true);
+    setFormError("");
     try {
       const { data } = await axios.post(`${API}/auth/forgot-password`, { email });
       setGeneratedCode(data.code || null);
@@ -39,7 +42,9 @@ export default function ForgotPasswordPage() {
         toast.info("If that email is registered, a code has been generated.");
       }
     } catch (err) {
-      toast.error(extractErrorMessage(err, "Could not generate code"));
+      const message = extractErrorMessage(err, "Could not generate code");
+      setFormError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -47,11 +52,14 @@ export default function ForgotPasswordPage() {
 
   const handleReset = async (e) => {
     e.preventDefault();
+    setFormError("");
     if (newPassword !== confirmPassword) {
+      setFormError("Passwords do not match");
       toast.error("Passwords do not match");
       return;
     }
     if (newPassword.length < 6) {
+      setFormError("Password must be at least 6 characters");
       toast.error("Password must be at least 6 characters");
       return;
     }
@@ -65,7 +73,9 @@ export default function ForgotPasswordPage() {
       toast.success("Password reset! Please sign in.");
       navigate("/login");
     } catch (err) {
-      toast.error(extractErrorMessage(err, "Reset failed"));
+      const message = extractErrorMessage(err, "Reset failed");
+      setFormError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -124,6 +134,8 @@ export default function ForgotPasswordPage() {
                 exit={{ opacity: 0, y: -10 }}
                 transition={{ duration: 0.35 }}
               >
+                <FormError id="forgot-form-error-step1" message={formError} />
+
                 <div>
                   <Label htmlFor="forgot-email" className="text-sky-700">Email</Label>
                   <div className="relative mt-1">
@@ -132,10 +144,13 @@ export default function ForgotPasswordPage() {
                       id="forgot-email"
                       type="email"
                       value={email}
-                      onChange={(e) => setEmail(e.target.value)}
+                      onChange={(e) => { setEmail(e.target.value); setFormError(""); }}
                       placeholder="you@example.com"
                       className="pl-10 rounded-2xl border-sky-100 bg-white/50 focus:bg-white focus:ring-2 focus:ring-sky-400"
+                      autoComplete="username"
                       required
+                      aria-invalid={!!formError}
+                      aria-describedby={formError ? "forgot-form-error-step1" : undefined}
                       data-testid="forgot-email-input"
                     />
                   </div>
@@ -205,6 +220,8 @@ export default function ForgotPasswordPage() {
                   </motion.div>
                 )}
 
+                <FormError id="forgot-form-error-step2" message={formError} />
+
                 <div>
                   <Label htmlFor="forgot-code" className="text-sky-700">Reset code</Label>
                   <div className="relative mt-1">
@@ -215,10 +232,13 @@ export default function ForgotPasswordPage() {
                       inputMode="numeric"
                       maxLength={6}
                       value={code}
-                      onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+                      onChange={(e) => { setCode(e.target.value.replace(/\D/g, "")); setFormError(""); }}
                       placeholder="6-digit code"
                       className="pl-10 rounded-2xl border-sky-100 bg-white/50 tracking-[0.3em] focus:bg-white focus:ring-2 focus:ring-sky-400"
+                      autoComplete="one-time-code"
                       required
+                      aria-invalid={!!formError}
+                      aria-describedby={formError ? "forgot-form-error-step2" : undefined}
                       data-testid="forgot-code-input"
                     />
                   </div>
@@ -232,11 +252,14 @@ export default function ForgotPasswordPage() {
                       id="new-password"
                       type="password"
                       value={newPassword}
-                      onChange={(e) => setNewPassword(e.target.value)}
+                      onChange={(e) => { setNewPassword(e.target.value); setFormError(""); }}
                       placeholder="At least 6 characters"
                       className="pl-10 rounded-2xl border-sky-100 bg-white/50 focus:bg-white focus:ring-2 focus:ring-sky-400"
+                      autoComplete="new-password"
                       required
                       minLength={6}
+                      aria-invalid={!!formError}
+                      aria-describedby={formError ? "forgot-form-error-step2" : undefined}
                       data-testid="forgot-new-password-input"
                     />
                   </div>
@@ -250,11 +273,14 @@ export default function ForgotPasswordPage() {
                       id="confirm-password"
                       type="password"
                       value={confirmPassword}
-                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      onChange={(e) => { setConfirmPassword(e.target.value); setFormError(""); }}
                       placeholder="Repeat the password"
                       className="pl-10 rounded-2xl border-sky-100 bg-white/50 focus:bg-white focus:ring-2 focus:ring-sky-400"
+                      autoComplete="new-password"
                       required
                       minLength={6}
+                      aria-invalid={!!formError}
+                      aria-describedby={formError ? "forgot-form-error-step2" : undefined}
                       data-testid="forgot-confirm-password-input"
                     />
                   </div>
@@ -270,6 +296,7 @@ export default function ForgotPasswordPage() {
                       setCode("");
                       setNewPassword("");
                       setConfirmPassword("");
+                      setFormError("");
                     }}
                     className="flex-1 rounded-full border-sky-100 text-sky-600 hover:bg-sky-50 py-6"
                     data-testid="forgot-start-over-btn"

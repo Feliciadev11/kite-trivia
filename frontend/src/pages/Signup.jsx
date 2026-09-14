@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
+import { FormError } from "../components/ui/form-error";
 import { useAuth } from "../App";
 import { toast } from "sonner";
 import { extractErrorMessage } from "../lib/errors";
@@ -18,17 +19,21 @@ export default function SignupPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [formError, setFormError] = useState("");
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
+    setFormError("");
 
     try {
       await register(email, password, name);
       toast.success("Account created! Let's play!");
       navigate('/dashboard');
     } catch (error) {
-      toast.error(extractErrorMessage(error, "Registration failed"));
+      const message = extractErrorMessage(error, "Registration failed");
+      setFormError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -54,6 +59,8 @@ export default function SignupPage() {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-5">
+              <FormError id="signup-form-error" message={formError} />
+
               <div>
                 <Label htmlFor="name" className="text-sky-700">Name</Label>
                 <div className="relative mt-1">
@@ -62,10 +69,13 @@ export default function SignupPage() {
                     id="name"
                     type="text"
                     value={name}
-                    onChange={(e) => setName(e.target.value)}
+                    onChange={(e) => { setName(e.target.value); setFormError(""); }}
                     placeholder="Your name"
                     className="pl-10 rounded-2xl border-sky-100 bg-white/50 focus:bg-white focus:ring-2 focus:ring-sky-400"
+                    autoComplete="name"
                     required
+                    aria-invalid={!!formError}
+                    aria-describedby={formError ? "signup-form-error" : undefined}
                     data-testid="name-input"
                   />
                 </div>
@@ -79,10 +89,13 @@ export default function SignupPage() {
                     id="email"
                     type="email"
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    onChange={(e) => { setEmail(e.target.value); setFormError(""); }}
                     placeholder="you@example.com"
                     className="pl-10 rounded-2xl border-sky-100 bg-white/50 focus:bg-white focus:ring-2 focus:ring-sky-400"
+                    autoComplete="username"
                     required
+                    aria-invalid={!!formError}
+                    aria-describedby={formError ? "signup-form-error" : undefined}
                     data-testid="email-input"
                   />
                 </div>
@@ -96,11 +109,14 @@ export default function SignupPage() {
                     id="password"
                     type="password"
                     value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    onChange={(e) => { setPassword(e.target.value); setFormError(""); }}
                     placeholder="Create a password"
                     className="pl-10 rounded-2xl border-sky-100 bg-white/50 focus:bg-white focus:ring-2 focus:ring-sky-400"
+                    autoComplete="new-password"
                     required
                     minLength={6}
+                    aria-invalid={!!formError}
+                    aria-describedby={formError ? "signup-form-error" : undefined}
                     data-testid="password-input"
                   />
                 </div>
