@@ -40,7 +40,7 @@ class KiteTriviaAPITester:
 
             try:
                 return success, response.json() if response.text else {}
-            except:
+            except Exception:
                 return success, {}
 
         except Exception as e:
