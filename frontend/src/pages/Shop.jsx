@@ -9,7 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs"
 import { useAuth, API, LoadingKite } from "../App";
 import { AtmosphericBackground } from "../components/Atmosphere";
 import { AudioControl } from "../components/AudioControl";
-import { getStoreProducts, purchaseProduct, listNonSubscriptionTransactions, findUnsyncedPurchases } from "../lib/purchases";
+import { getStoreProducts, purchaseProduct, listNonSubscriptionTransactions, findUnsyncedPurchases, syncCharacterPurchase } from "../lib/purchases";
 import { logError } from "../lib/logger";
 
 import { EquippedSummary } from "./shop/EquippedSummary";
@@ -21,26 +21,6 @@ const TAB_TRIGGERS = [
   { value: "companions", label: "Companions", Icon: Heart },
   { value: "skies", label: "Skies", Icon: Palette },
 ];
-
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-// RevenueCat's server-side subscriber record can lag a beat behind the
-// on-device StoreKit transaction that just completed — reason:
-// "not_yet_visible" means "ask again shortly", not "this failed". Retry a
-// few times before giving up; any other rejection (network, 4xx, etc.)
-// surfaces immediately instead of being masked as a timing issue.
-async function syncCharacterPurchase(characterId, productId, transactionId, { retries = 3, delayMs = 1500 } = {}) {
-  for (let attempt = 0; ; attempt++) {
-    const { data } = await axios.post(
-      `${API}/characters/purchase/sync`,
-      { character_id: characterId, product_id: productId, transaction_id: transactionId },
-      { withCredentials: true }
-    );
-    if (data.ok && data.granted) return data;
-    if (data.reason !== "not_yet_visible" || attempt >= retries) return data;
-    await sleep(delayMs * (attempt + 1));
-  }
-}
 
 export default function ShopPage() {
   const navigate = useNavigate();

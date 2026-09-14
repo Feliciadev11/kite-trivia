@@ -13,9 +13,15 @@
  * create in App Store Connect and Google Play Console. See README-mobile.md
  * for the exact steps.
  */
+import axios from "axios";
 import { Capacitor } from "@capacitor/core";
 import { logError } from "./logger";
 import ENTITLEMENTS from "./entitlements.generated.json";
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+// Built locally (not imported from App.js) to avoid a circular import —
+// PremiumContext.jsx imports both App.js (for API) and this module.
+const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 // -------------------- Config (edit here) --------------------
 // RevenueCat public SDK keys (safe to ship in the client). Grab them from
@@ -417,4 +423,33 @@ export function findUnsyncedPurchases(characters, ownedCharacterIds, transaction
     }
   }
   return unsynced;
+}
+
+// RevenueCat's server-side subscriber record can lag a beat behind the
+// on-device StoreKit transaction that just completed — reason:
+// "not_yet_visible" means "ask again shortly", not "this failed". Retry a
+// few times before giving up.
+//
+// The POST itself can also drop with no response at all (device network
+// blip right after a purchase sheet) — same "no error.response" shape
+// questionsFetch.js already treats as retryable, not a hard failure. Retry
+// that too; any other rejection (4xx, etc.) surfaces immediately.
+export async function syncCharacterPurchase(characterId, productId, transactionId, { retries = 3, delayMs = 1500 } = {}) {
+  for (let attempt = 0; ; attempt++) {
+    let data;
+    try {
+      ({ data } = await axios.post(
+        `${API}/characters/purchase/sync`,
+        { character_id: characterId, product_id: productId, transaction_id: transactionId },
+        { withCredentials: true }
+      ));
+    } catch (e) {
+      if (e?.response || attempt >= retries) throw e;
+      await sleep(delayMs * (attempt + 1));
+      continue;
+    }
+    if (data.ok && data.granted) return data;
+    if (data.reason !== "not_yet_visible" || attempt >= retries) return data;
+    await sleep(delayMs * (attempt + 1));
+  }
 }
