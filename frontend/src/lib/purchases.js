@@ -184,25 +184,46 @@ export async function getStoreProducts(productIds) {
   }
 }
 
+// Picks the transaction for `productId`, preferring an exact match. Shared
+// by purchaseProduct() and the pending-purchase reconciliation below.
+function pickNonSubTransaction(txns, productId) {
+  return txns.find((t) => t.productIdentifier === productId) || txns[txns.length - 1] || null;
+}
+
 /**
  * Purchases a single non-subscription store product (as returned by
  * `getStoreProducts`). Returns
  * { ok, transactionId, productId, canceled?, error? }.
+ *
+ * StoreKit can finish the purchase a beat before RevenueCat's own
+ * customerInfo cache reflects it (the promise resolves, but
+ * nonSubscriptionTransactions is still the pre-purchase snapshot) — a real
+ * race we hit in testing. If the transaction isn't in the immediate result,
+ * force one fresh customerInfo fetch before giving up.
  */
 export async function purchaseProduct(product) {
   if (!IS_NATIVE) return { ok: false, reason: "unavailable" };
   const mod = await _lazyImport();
   if (!mod) return { ok: false, reason: "sdk_missing" };
+  const productId = product.identifier;
   try {
     const result = await mod.Purchases.purchaseStoreProduct({ product });
-    const txns = result?.customerInfo?.nonSubscriptionTransactions || [];
-    const productId = product.identifier;
-    const txn = txns.find((t) => t.productIdentifier === productId) || txns[txns.length - 1];
+    let txns = result?.customerInfo?.nonSubscriptionTransactions || [];
+    let txn = pickNonSubTransaction(txns, productId);
+    let customerInfo = result?.customerInfo;
+
+    if (!txn) {
+      const fresh = await mod.Purchases.getCustomerInfo().catch(() => null);
+      txns = fresh?.customerInfo?.nonSubscriptionTransactions || [];
+      txn = pickNonSubTransaction(txns, productId);
+      customerInfo = fresh?.customerInfo || customerInfo;
+    }
+
     return {
       ok: true,
       transactionId: txn?.transactionIdentifier || null,
       productId,
-      customerInfo: result?.customerInfo,
+      customerInfo,
     };
   } catch (e) {
     if (e?.userCancelled) {
@@ -210,6 +231,37 @@ export async function purchaseProduct(product) {
     }
     logError("purchaseProduct failed", e);
     return { ok: false, reason: "purchase_failed", error: String(e?.message || e) };
+  }
+}
+
+/**
+ * Every non-subscription transaction RevenueCat currently has on file for
+ * this customer, keyed by product id. Used to silently re-sync purchases
+ * that completed at the store/RevenueCat level but never reached our
+ * backend (network drop between purchase and /characters/purchase/sync,
+ * app killed mid-purchase, etc.) — the client-side half of the "restore"
+ * story for a la carte items, mirroring what restorePurchases() does for
+ * the subscription.
+ */
+export async function listNonSubscriptionTransactions() {
+  if (!IS_NATIVE) return { ok: false, reason: "unavailable" };
+  const mod = await _lazyImport();
+  if (!mod) return { ok: false, reason: "sdk_missing" };
+  try {
+    const result = await mod.Purchases.getCustomerInfo();
+    const txns = result?.customerInfo?.nonSubscriptionTransactions || [];
+    const byProductId = {};
+    for (const t of txns) {
+      // Keep the latest transaction per product.
+      byProductId[t.productIdentifier] = pickNonSubTransaction(
+        txns.filter((x) => x.productIdentifier === t.productIdentifier),
+        t.productIdentifier
+      );
+    }
+    return { ok: true, transactions: byProductId };
+  } catch (e) {
+    logError("listNonSubscriptionTransactions failed", e);
+    return { ok: false, reason: "query_failed", error: String(e?.message || e) };
   }
 }
 
@@ -333,4 +385,36 @@ export async function presentCustomerCenter() {
     logError("presentCustomerCenter failed", e);
     return { ok: false, reason: "customer_center_failed", error: String(e?.message || e) };
   }
+}
+
+// -------------------- Pending-purchase reconciliation --------------------
+/**
+ * Pure diff: which shop characters have a RevenueCat transaction on file but
+ * aren't in the user's owned lists yet. Covers a purchase that completed at
+ * the store/RevenueCat level but never reached /characters/purchase/sync
+ * (network drop, app killed mid-purchase) — the /premium/webhook backstop
+ * may have already granted it server-side, or it's still waiting on us.
+ *
+ * @param {Array<{character_id: string, product_id?: string}>} characters
+ * @param {Set<string>|string[]} ownedCharacterIds - union of the user's
+ *   owned_characters/owned_companions/owned_sky_themes
+ * @param {Record<string, {transactionIdentifier?: string}>} transactionsByProductId
+ *   from listNonSubscriptionTransactions()
+ * @returns {Array<{characterId: string, productId: string, transactionId: string}>}
+ */
+export function findUnsyncedPurchases(characters, ownedCharacterIds, transactionsByProductId) {
+  const owned = ownedCharacterIds instanceof Set ? ownedCharacterIds : new Set(ownedCharacterIds || []);
+  const unsynced = [];
+  for (const c of characters || []) {
+    if (!c.product_id || owned.has(c.character_id)) continue;
+    const txn = transactionsByProductId?.[c.product_id];
+    if (txn?.transactionIdentifier) {
+      unsynced.push({
+        characterId: c.character_id,
+        productId: c.product_id,
+        transactionId: txn.transactionIdentifier,
+      });
+    }
+  }
+  return unsynced;
 }

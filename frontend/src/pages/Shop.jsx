@@ -9,7 +9,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs"
 import { useAuth, API, LoadingKite } from "../App";
 import { AtmosphericBackground } from "../components/Atmosphere";
 import { AudioControl } from "../components/AudioControl";
-import { getStoreProducts, purchaseProduct } from "../lib/purchases";
+import { getStoreProducts, purchaseProduct, listNonSubscriptionTransactions, findUnsyncedPurchases } from "../lib/purchases";
+import { logError } from "../lib/logger";
 
 import { EquippedSummary } from "./shop/EquippedSummary";
 import { PurchaseDialog } from "./shop/PurchaseDialog";
@@ -20,6 +21,26 @@ const TAB_TRIGGERS = [
   { value: "companions", label: "Companions", Icon: Heart },
   { value: "skies", label: "Skies", Icon: Palette },
 ];
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// RevenueCat's server-side subscriber record can lag a beat behind the
+// on-device StoreKit transaction that just completed — reason:
+// "not_yet_visible" means "ask again shortly", not "this failed". Retry a
+// few times before giving up; any other rejection (network, 4xx, etc.)
+// surfaces immediately instead of being masked as a timing issue.
+async function syncCharacterPurchase(characterId, productId, transactionId, { retries = 3, delayMs = 1500 } = {}) {
+  for (let attempt = 0; ; attempt++) {
+    const { data } = await axios.post(
+      `${API}/characters/purchase/sync`,
+      { character_id: characterId, product_id: productId, transaction_id: transactionId },
+      { withCredentials: true }
+    );
+    if (data.ok && data.granted) return data;
+    if (data.reason !== "not_yet_visible" || attempt >= retries) return data;
+    await sleep(delayMs * (attempt + 1));
+  }
+}
 
 export default function ShopPage() {
   const navigate = useNavigate();
@@ -56,6 +77,47 @@ export default function ShopPage() {
       }
     })();
   }, [loadCharacters]);
+
+  // Recover any purchase that completed at the store/RevenueCat level but
+  // never reached our backend last time (network drop mid-purchase, app
+  // killed before the sync call, etc.) — silent, no dialog, runs once
+  // characters+user are loaded. This is the a-la-carte equivalent of
+  // "Restore Purchases": RevenueCat is the source of truth for what was
+  // actually bought, so we diff it against what the user owns and sync the
+  // gap ourselves instead of leaving it to a lucky webhook delivery.
+  useEffect(() => {
+    if (!characters.length || !user) return;
+    let cancelled = false;
+    (async () => {
+      const { ok, transactions } = await listNonSubscriptionTransactions();
+      if (!ok || cancelled) return;
+      const owned = new Set([
+        ...(user.owned_characters || []),
+        ...(user.owned_companions || []),
+        ...(user.owned_sky_themes || []),
+      ]);
+      const pending = findUnsyncedPurchases(characters, owned, transactions);
+      if (!pending.length) return;
+      let recovered = 0;
+      for (const p of pending) {
+        try {
+          const data = await syncCharacterPurchase(p.characterId, p.productId, p.transactionId, { retries: 0 });
+          if (data.ok && data.granted) recovered++;
+        } catch (e) {
+          logError("pending-purchase reconciliation failed", { productId: p.productId, error: String(e) });
+        }
+      }
+      if (recovered > 0 && !cancelled) {
+        toast.success(recovered === 1 ? "Recovered a previous purchase!" : `Recovered ${recovered} previous purchases!`);
+        await refreshUser();
+        await loadCharacters();
+      }
+    })();
+    return () => { cancelled = true; };
+    // Only re-run when the set of characters/owned items actually changes,
+    // not on every user-object refresh (would loop with the refreshUser() above).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [characters, user?.owned_characters, user?.owned_companions, user?.owned_sky_themes]);
 
   const itemsByCategory = useMemo(() => ({
     kites:      characters.filter(c => c.category === "kite"),
@@ -130,16 +192,22 @@ export default function ShopPage() {
         throw new Error(result.error || "Purchase couldn't complete");
       }
 
-      const { data: syncData } = await axios.post(
-        `${API}/characters/purchase/sync`,
-        {
-          character_id: character.character_id,
-          product_id: character.product_id,
-          transaction_id: result.transactionId,
-        },
-        { withCredentials: true }
+      const syncData = await syncCharacterPurchase(
+        character.character_id,
+        character.product_id,
+        result.transactionId
       );
       if (!syncData.ok || !syncData.granted) {
+        // The store + RevenueCat both confirmed this purchase (we have a
+        // transactionId) but our own verification didn't land — the
+        // /premium/webhook backstop or the next Shop visit's reconciliation
+        // (below) will still pick it up, so don't let this look silent.
+        logError("purchase confirmed by store but sync never landed", {
+          characterId: character.character_id,
+          productId: character.product_id,
+          transactionId: result.transactionId,
+          reason: syncData.reason,
+        });
         throw new Error("Purchase is still processing. Check back in a moment.");
       }
 

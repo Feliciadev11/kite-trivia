@@ -1388,6 +1388,10 @@ async def sync_character_purchase(
             headers={"Authorization": f"Bearer {secret_key}"},
         )
     if resp.status_code != 200:
+        logger.warning(
+            f"[purchase/sync] RevenueCat unreachable status={resp.status_code} "
+            f"user={current_user.user_id} product={payload.product_id}"
+        )
         raise HTTPException(status_code=502, detail="Could not reach RevenueCat")
 
     subscriber = resp.json().get("subscriber", {})
@@ -1397,7 +1401,13 @@ async def sync_character_purchase(
         for t in transactions
     )
     if not verified:
-        # RevenueCat may not have propagated the transaction yet — not a hard failure.
+        # RevenueCat may not have propagated the transaction yet — not a hard
+        # failure, the client retries. Logged so a run of these for one
+        # product/user is visible instead of silently resolving or not.
+        logger.warning(
+            f"[purchase/sync] not_yet_visible user={current_user.user_id} "
+            f"product={payload.product_id} transaction={payload.transaction_id}"
+        )
         return {"ok": False, "granted": False, "reason": "not_yet_visible"}
 
     newly_granted = await _grant_purchase(
