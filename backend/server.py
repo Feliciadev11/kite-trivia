@@ -921,11 +921,18 @@ async def sync_premium(
     if not secret_key:
         raise HTTPException(status_code=500, detail="Purchase verification not configured")
 
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        resp = await client.get(
-            f"{REVENUECAT_API_BASE}/subscribers/{current_user.user_id}",
-            headers={"Authorization": f"Bearer {secret_key}"},
-        )
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(
+                f"{REVENUECAT_API_BASE}/subscribers/{current_user.user_id}",
+                headers={"Authorization": f"Bearer {secret_key}"},
+            )
+    except httpx.RequestError as e:
+        # See the matching fix in /characters/purchase/sync: an unhandled
+        # connection failure here skips CORSMiddleware and reaches the
+        # client as an undifferentiated "Network Error".
+        logger.error(f"[premium/sync] RevenueCat request failed: {e}")
+        raise HTTPException(status_code=502, detail="Could not reach RevenueCat")
     if resp.status_code != 200:
         raise HTTPException(status_code=502, detail="Could not reach RevenueCat")
 
@@ -1382,11 +1389,20 @@ async def sync_character_purchase(
     if not secret_key:
         raise HTTPException(status_code=500, detail="Purchase verification not configured")
 
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        resp = await client.get(
-            f"{REVENUECAT_API_BASE}/subscribers/{current_user.user_id}",
-            headers={"Authorization": f"Bearer {secret_key}"},
-        )
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(
+                f"{REVENUECAT_API_BASE}/subscribers/{current_user.user_id}",
+                headers={"Authorization": f"Bearer {secret_key}"},
+            )
+    except httpx.RequestError as e:
+        # A connection-level failure here (DNS, timeout, TLS) previously
+        # propagated as an unhandled exception, which skips CORSMiddleware
+        # and reaches the client as an undifferentiated "Network Error" with
+        # no response — indistinguishable from an actual purchase failure.
+        # Same fix as /auth/session's httpx call above.
+        logger.error(f"[purchase/sync] RevenueCat request failed: {e}")
+        raise HTTPException(status_code=502, detail="Could not reach RevenueCat")
     if resp.status_code != 200:
         logger.warning(
             f"[purchase/sync] RevenueCat unreachable status={resp.status_code} "
