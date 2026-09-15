@@ -1,0 +1,768 @@
+{
+  "identifier": "862C8B69-BBD4-4EC2-9A26-92173AE32F39",
+  "nonRenewingSubscriptions": [],
+  "products": [
+    {
+      "displayPrice": "1.99",
+      "familyShareable": false,
+      "internalID": "3D9843F2-557F-4770-946A-3EF84F118183",
+      "localizations": [
+        {
+          "description": "A gentle arc of colors dancing in the breeze",
+          "displayName": "Rainbow Kite",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "kite_rainbow_kite",
+      "referenceName": "Rainbow Kite",
+      "type": "NonConsumable"
+    },
+    {
+      "displayPrice": "1.99",
+      "familyShareable": false,
+      "internalID": "0BA9774A-C1D7-4085-9482-A83ED18B0A04",
+      "localizations": [
+        {
+          "description": "A lovely heart that floats with warmth",
+          "displayName": "Heart Kite",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "kite_heart_kite",
+      "referenceName": "Heart Kite",
+      "type": "NonConsumable"
+    },
+    {
+      "displayPrice": "2.49",
+      "familyShareable": false,
+      "internalID": "917D0EBE-6297-43B6-8428-B20F8652C0FC",
+      "localizations": [
+        {
+          "description": "As soft and dreamy as the clouds themselves",
+          "displayName": "Cloud Kite",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "kite_cloud_kite",
+      "referenceName": "Cloud Kite",
+      "type": "NonConsumable"
+    },
+    {
+      "displayPrice": "2.49",
+      "familyShareable": false,
+      "internalID": "74830858-4697-47F4-9744-5A43D7A1DBEA",
+      "localizations": [
+        {
+          "description": "Delicate wings that catch the gentle wind",
+          "displayName": "Butterfly Kite",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "kite_butterfly_kite",
+      "referenceName": "Butterfly Kite",
+      "type": "NonConsumable"
+    },
+    {
+      "displayPrice": "3.99",
+      "familyShareable": false,
+      "internalID": "E2329BB5-5BCD-4870-B439-FDE2A775D22B",
+      "localizations": [
+        {
+          "description": "A twinkling star that glows softly at dusk",
+          "displayName": "Star Kite",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "kite_star_kite",
+      "referenceName": "Star Kite",
+      "type": "NonConsumable"
+    },
+    {
+      "displayPrice": "3.99",
+      "familyShareable": false,
+      "internalID": "40766581-9369-4806-9046-081143A7448A",
+      "localizations": [
+        {
+          "description": "A wise companion for evening flights",
+          "displayName": "Owl Kite",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "kite_owl_kite",
+      "referenceName": "Owl Kite",
+      "type": "NonConsumable"
+    },
+    {
+      "displayPrice": "3.49",
+      "familyShareable": false,
+      "internalID": "3EA5F997-8E40-427E-B8E7-58BE136938BE",
+      "localizations": [
+        {
+          "description": "Graceful as a koi swimming through sky-waters",
+          "displayName": "Koi Fish Kite",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "kite_koi_fish_kite",
+      "referenceName": "Koi Fish Kite",
+      "type": "NonConsumable"
+    },
+    {
+      "displayPrice": "4.49",
+      "familyShareable": false,
+      "internalID": "8A522303-C91F-4BE7-AB74-75176D0F28BF",
+      "localizations": [
+        {
+          "description": "Nostalgic vibes from simpler times",
+          "displayName": "Retro Rainbow Kite",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "kite_retro_rainbow_kite",
+      "referenceName": "Retro Rainbow Kite",
+      "type": "NonConsumable"
+    },
+    {
+      "displayPrice": "4.99",
+      "familyShareable": false,
+      "internalID": "9B6D13C8-915B-49CF-8C77-07ABD1B1AEBA",
+      "localizations": [
+        {
+          "description": "Cherry blossoms drift eternally on this peaceful kite",
+          "displayName": "Sakura Blossom Kite",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "kite_sakura_blossom_kite",
+      "referenceName": "Sakura Blossom Kite",
+      "type": "NonConsumable"
+    },
+    {
+      "displayPrice": "5.99",
+      "familyShareable": false,
+      "internalID": "927B2B47-ED5C-4B04-92EA-270D2CAE4C5F",
+      "localizations": [
+        {
+          "description": "Woven from starlight and moonbeams",
+          "displayName": "Celestial Kite",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "kite_celestial_kite",
+      "referenceName": "Celestial Kite",
+      "type": "NonConsumable"
+    },
+    {
+      "displayPrice": "5.99",
+      "familyShareable": false,
+      "internalID": "B0DB02E9-F3EA-44FC-A28A-AC9679340397",
+      "localizations": [
+        {
+          "description": "A gentle dragon that rides the wind currents",
+          "displayName": "Dragon Kite",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "kite_dragon_kite",
+      "referenceName": "Dragon Kite",
+      "type": "NonConsumable"
+    },
+    {
+      "displayPrice": "6.49",
+      "familyShareable": false,
+      "internalID": "8DCB2C9A-0D43-48A4-A9F2-A6A49D688E83",
+      "localizations": [
+        {
+          "description": "The night sky captured in fabric and string",
+          "displayName": "Moon & Stars Kite",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "kite_moon_and_stars_kite",
+      "referenceName": "Moon & Stars Kite",
+      "type": "NonConsumable"
+    },
+    {
+      "displayPrice": "6.99",
+      "familyShareable": false,
+      "internalID": "8D0B6EDC-D6F1-4331-A82C-A127698A387E",
+      "localizations": [
+        {
+          "description": "Ethereal tentacles flow like underwater dreams",
+          "displayName": "Jellyfish Kite",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "kite_jellyfish_kite",
+      "referenceName": "Jellyfish Kite",
+      "type": "NonConsumable"
+    },
+    {
+      "displayPrice": "6.99",
+      "familyShareable": false,
+      "internalID": "D5880D0F-F826-494D-9EE7-D592F7DFB6EB",
+      "localizations": [
+        {
+          "description": "Calm within the tempest, beautiful in its power",
+          "displayName": "Storm Kite",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "kite_storm_kite",
+      "referenceName": "Storm Kite",
+      "type": "NonConsumable"
+    },
+    {
+      "displayPrice": "6.99",
+      "familyShareable": false,
+      "internalID": "E587EC25-D4E2-47D6-B05C-5F5EFFC8535E",
+      "localizations": [
+        {
+          "description": "Majestic and free, soaring above all",
+          "displayName": "Eagle Kite",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "kite_eagle_kite",
+      "referenceName": "Eagle Kite",
+      "type": "NonConsumable"
+    },
+    {
+      "displayPrice": "9.99",
+      "familyShareable": false,
+      "internalID": "A208B51E-3696-4A22-BD5E-936E4D48F07E",
+      "localizations": [
+        {
+          "description": "Reborn with each sunrise, eternally radiant",
+          "displayName": "Phoenix Kite",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "kite_phoenix_kite",
+      "referenceName": "Phoenix Kite",
+      "type": "NonConsumable"
+    },
+    {
+      "displayPrice": "9.99",
+      "familyShareable": false,
+      "internalID": "9B28B8FB-4345-4DA8-A530-2B2D007B62C5",
+      "localizations": [
+        {
+          "description": "Elegant sophistication against any sky",
+          "displayName": "Black & Gold Luxury Kite",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "kite_black_and_gold_luxury_kite",
+      "referenceName": "Black & Gold Luxury Kite",
+      "type": "NonConsumable"
+    },
+    {
+      "displayPrice": "11.99",
+      "familyShareable": false,
+      "internalID": "26E35059-4F72-4044-BC9E-91920905F498",
+      "localizations": [
+        {
+          "description": "A glimpse into dreamy digital horizons",
+          "displayName": "Neon Cyber Kite",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "kite_neon_cyber_kite",
+      "referenceName": "Neon Cyber Kite",
+      "type": "NonConsumable"
+    },
+    {
+      "displayPrice": "12.99",
+      "familyShareable": false,
+      "internalID": "A80FED95-8F87-4E12-9CBA-0973E3CBEE8D",
+      "localizations": [
+        {
+          "description": "Dancing lights of the northern sky",
+          "displayName": "Aurora Kite",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "kite_aurora_kite",
+      "referenceName": "Aurora Kite",
+      "type": "NonConsumable"
+    },
+    {
+      "displayPrice": "2.99",
+      "familyShareable": false,
+      "internalID": "166256F9-CE01-405B-BAA3-AFC9891075C9",
+      "localizations": [
+        {
+          "description": "A curious fox that follows your kite",
+          "displayName": "Little Fox",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "companion_little_fox",
+      "referenceName": "Little Fox",
+      "type": "NonConsumable"
+    },
+    {
+      "displayPrice": "2.99",
+      "familyShareable": false,
+      "internalID": "5D168FC0-9A9F-4E72-910F-62928F70E509",
+      "localizations": [
+        {
+          "description": "A wise owl companion for evening adventures",
+          "displayName": "Night Owl",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "companion_night_owl",
+      "referenceName": "Night Owl",
+      "type": "NonConsumable"
+    },
+    {
+      "displayPrice": "2.99",
+      "familyShareable": false,
+      "internalID": "2C6FB307-C71A-40D7-97B2-F62000F01F65",
+      "localizations": [
+        {
+          "description": "A mysterious feline friend bringing good luck",
+          "displayName": "Black Cat",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "companion_black_cat",
+      "referenceName": "Black Cat",
+      "type": "NonConsumable"
+    },
+    {
+      "displayPrice": "3.49",
+      "familyShareable": false,
+      "internalID": "0E17E5D7-9DD6-43D5-92EF-7DC97C79B537",
+      "localizations": [
+        {
+          "description": "A fluffy pilot ready for sky adventures",
+          "displayName": "Aviator Corgi",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "companion_aviator_corgi",
+      "referenceName": "Aviator Corgi",
+      "type": "NonConsumable"
+    },
+    {
+      "displayPrice": "4.49",
+      "familyShareable": false,
+      "internalID": "89C1F048-FA4E-43ED-923F-C21650363012",
+      "localizations": [
+        {
+          "description": "A gentle red panda napping on the breeze",
+          "displayName": "Red Panda",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "companion_red_panda",
+      "referenceName": "Red Panda",
+      "type": "NonConsumable"
+    },
+    {
+      "displayPrice": "4.99",
+      "familyShareable": false,
+      "internalID": "F20B4B3C-EA16-45AD-8EEC-D0D5D6964371",
+      "localizations": [
+        {
+          "description": "An arctic beauty with eyes like winter stars",
+          "displayName": "Snow Fox",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "companion_snow_fox",
+      "referenceName": "Snow Fox",
+      "type": "NonConsumable"
+    },
+    {
+      "displayPrice": "4.99",
+      "familyShareable": false,
+      "internalID": "1EAC15D7-3FB5-4857-8BE8-5A5F839BBC77",
+      "localizations": [
+        {
+          "description": "A mystical raven that speaks in riddles",
+          "displayName": "Raven",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "companion_raven",
+      "referenceName": "Raven",
+      "type": "NonConsumable"
+    },
+    {
+      "displayPrice": "5.99",
+      "familyShareable": false,
+      "internalID": "C893D07A-1D49-442E-8787-54EEFA52FF9D",
+      "localizations": [
+        {
+          "description": "Dancing lights that follow your journey",
+          "displayName": "Firefly Swarm",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "companion_firefly_swarm",
+      "referenceName": "Firefly Swarm",
+      "type": "NonConsumable"
+    },
+    {
+      "displayPrice": "6.49",
+      "familyShareable": false,
+      "internalID": "CC8D709A-2A1C-4306-BE73-3B3E05609880",
+      "localizations": [
+        {
+          "description": "An ethereal creature from dreamy depths",
+          "displayName": "Floating Jellyfish",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "companion_floating_jellyfish",
+      "referenceName": "Floating Jellyfish",
+      "type": "NonConsumable"
+    },
+    {
+      "displayPrice": "8.99",
+      "familyShareable": false,
+      "internalID": "19E73147-F659-4091-8BEF-2DA44FE58303",
+      "localizations": [
+        {
+          "description": "A small dragon with a big heart",
+          "displayName": "Tiny Dragon",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "companion_tiny_dragon",
+      "referenceName": "Tiny Dragon",
+      "type": "NonConsumable"
+    },
+    {
+      "displayPrice": "9.99",
+      "familyShareable": false,
+      "internalID": "80C5163B-0034-4490-848D-30AFE73B4997",
+      "localizations": [
+        {
+          "description": "A celestial deer made of stardust",
+          "displayName": "Spirit Deer",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "companion_spirit_deer",
+      "referenceName": "Spirit Deer",
+      "type": "NonConsumable"
+    },
+    {
+      "displayPrice": "1.99",
+      "familyShareable": false,
+      "internalID": "92967050-B137-46AA-B016-5DD3D4FE5A62",
+      "localizations": [
+        {
+          "description": "Bright blue skies with gentle clouds",
+          "displayName": "Clear Day",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "theme_clear_day",
+      "referenceName": "Clear Day",
+      "type": "NonConsumable"
+    },
+    {
+      "displayPrice": "2.49",
+      "familyShareable": false,
+      "internalID": "DBE79316-82EB-495C-BE84-4888FFD7DCF9",
+      "localizations": [
+        {
+          "description": "Warm oranges and pinks of evening",
+          "displayName": "Sunset Glow",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "theme_sunset_glow",
+      "referenceName": "Sunset Glow",
+      "type": "NonConsumable"
+    },
+    {
+      "displayPrice": "3.49",
+      "familyShareable": false,
+      "internalID": "5749025F-C02D-410D-A64B-84B91743EE8C",
+      "localizations": [
+        {
+          "description": "The magical hour between day and night",
+          "displayName": "Twilight",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "theme_twilight",
+      "referenceName": "Twilight",
+      "type": "NonConsumable"
+    },
+    {
+      "displayPrice": "3.49",
+      "familyShareable": false,
+      "internalID": "7CD24E2D-C5DD-4C27-9A4B-2BB7E9044773",
+      "localizations": [
+        {
+          "description": "Soft, dreamy clouds on a gentle day",
+          "displayName": "Cloudy Dreams",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "theme_cloudy_dreams",
+      "referenceName": "Cloudy Dreams",
+      "type": "NonConsumable"
+    },
+    {
+      "displayPrice": "3.99",
+      "familyShareable": false,
+      "internalID": "56FB5CC9-C1FE-4D1B-947A-4009A8342A00",
+      "localizations": [
+        {
+          "description": "Everything glows with warm, soft light",
+          "displayName": "Golden Hour",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "theme_golden_hour",
+      "referenceName": "Golden Hour",
+      "type": "NonConsumable"
+    },
+    {
+      "displayPrice": "4.99",
+      "familyShareable": false,
+      "internalID": "260F2C4F-C043-4E03-A0F9-9D80BD137FB0",
+      "localizations": [
+        {
+          "description": "A canvas of twinkling stars",
+          "displayName": "Starry Night",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "theme_starry_night",
+      "referenceName": "Starry Night",
+      "type": "NonConsumable"
+    },
+    {
+      "displayPrice": "5.49",
+      "familyShareable": false,
+      "internalID": "D9DE9463-654D-4380-88B0-C61728F00F4F",
+      "localizations": [
+        {
+          "description": "Silver moonlight illuminates the world",
+          "displayName": "Moonlit",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "theme_moonlit",
+      "referenceName": "Moonlit",
+      "type": "NonConsumable"
+    },
+    {
+      "displayPrice": "5.49",
+      "familyShareable": false,
+      "internalID": "4C809D56-27AC-4463-8BA2-5581D03105E0",
+      "localizations": [
+        {
+          "description": "Soft rain with distant rolling clouds",
+          "displayName": "Gentle Rain",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "theme_gentle_rain",
+      "referenceName": "Gentle Rain",
+      "type": "NonConsumable"
+    },
+    {
+      "displayPrice": "7.99",
+      "familyShareable": false,
+      "internalID": "F0CC7213-EC22-415D-98F0-09672ADCF619",
+      "localizations": [
+        {
+          "description": "Northern lights dance across the heavens",
+          "displayName": "Aurora Borealis",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "theme_aurora_borealis",
+      "referenceName": "Aurora Borealis",
+      "type": "NonConsumable"
+    },
+    {
+      "displayPrice": "8.99",
+      "familyShareable": false,
+      "internalID": "78B301F1-609E-4AC1-99F7-50D2626413A0",
+      "localizations": [
+        {
+          "description": "Deep space with nebulas and distant galaxies",
+          "displayName": "Celestial Night",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "theme_celestial_night",
+      "referenceName": "Celestial Night",
+      "type": "NonConsumable"
+    },
+    {
+      "displayPrice": "8.99",
+      "familyShareable": false,
+      "internalID": "CF30250B-1735-4E48-82F5-A9635D0271FC",
+      "localizations": [
+        {
+          "description": "Petals drift through a pink-hued sky",
+          "displayName": "Cherry Blossom Sky",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "theme_cherry_blossom_sky",
+      "referenceName": "Cherry Blossom Sky",
+      "type": "NonConsumable"
+    },
+    {
+      "displayPrice": "3.49",
+      "familyShareable": false,
+      "internalID": "56115772-77F8-4858-A0F7-7E4A5A62EE0A",
+      "localizations": [
+        {
+          "description": "Pastel petals on a soft mint sky",
+          "displayName": "Spring Bloom",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "theme_spring_bloom",
+      "referenceName": "Spring Bloom",
+      "type": "NonConsumable"
+    },
+    {
+      "displayPrice": "3.49",
+      "familyShareable": false,
+      "internalID": "70EF2377-3D46-48BB-A2DC-05F5A34CF03C",
+      "localizations": [
+        {
+          "description": "Bright coral horizon with sun haze",
+          "displayName": "Summer Heatwave",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "theme_summer_heatwave",
+      "referenceName": "Summer Heatwave",
+      "type": "NonConsumable"
+    },
+    {
+      "displayPrice": "5.49",
+      "familyShareable": false,
+      "internalID": "E581CD4B-B45D-4432-893B-BE7AF677AB29",
+      "localizations": [
+        {
+          "description": "Amber and burgundy with falling leaves",
+          "displayName": "Autumn Leaves",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "theme_autumn_leaves",
+      "referenceName": "Autumn Leaves",
+      "type": "NonConsumable"
+    },
+    {
+      "displayPrice": "5.49",
+      "familyShareable": false,
+      "internalID": "044F3636-E316-467B-AAFC-969E3077663E",
+      "localizations": [
+        {
+          "description": "Pale silver with delicate snowflakes",
+          "displayName": "Winter Frost",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "theme_winter_frost",
+      "referenceName": "Winter Frost",
+      "type": "NonConsumable"
+    }
+  ],
+  "settings": {
+    "_askToBuyEnabled": false,
+    "_failTransactionsEnabled": false,
+    "_locale": "en_US",
+    "_storefront": "USA",
+    "_storeKitErrors": [
+      {
+        "current": null,
+        "enabled": false,
+        "name": "Load Products"
+      },
+      {
+        "current": null,
+        "enabled": false,
+        "name": "Purchase"
+      },
+      {
+        "current": null,
+        "enabled": false,
+        "name": "Verification"
+      },
+      {
+        "current": null,
+        "enabled": false,
+        "name": "App Transaction"
+      },
+      {
+        "current": null,
+        "enabled": false,
+        "name": "Manage Subscriptions Sheet"
+      },
+      {
+        "current": null,
+        "enabled": false,
+        "name": "Refund Request Sheet"
+      },
+      {
+        "current": null,
+        "enabled": false,
+        "name": "Offer Code Redeem Sheet"
+      },
+      {
+        "current": null,
+        "enabled": false,
+        "name": "Sync"
+      },
+      {
+        "current": null,
+        "enabled": false,
+        "name": "Subscription Status"
+      }
+    ]
+  },
+  "subscriptionGroups": [
+    {
+      "id": "8166112F-F978-4855-8C19-0975CAFBFEDA",
+      "localizations": [],
+      "name": "Kite Premium",
+      "subscriptions": [
+        {
+          "adHocOffers": [],
+          "codeOffers": [],
+          "displayPrice": "4.99",
+          "familyShareable": false,
+          "groupNumber": 1,
+          "internalID": "8BD6D0DD-89BA-4A2B-8CEE-664A036A13C9",
+          "introductoryOffer": null,
+          "localizations": [
+            {
+              "description": "Unlimited daily rounds and full access to Kite Premium.",
+              "displayName": "Kite Premium Monthly",
+              "locale": "en_US"
+            }
+          ],
+          "productID": "monthly",
+          "recurringSubscriptionPeriod": "P1M",
+          "referenceName": "Kite Premium Monthly",
+          "subscriptionGroupID": "8166112F-F978-4855-8C19-0975CAFBFEDA",
+          "type": "RecurringSubscription"
+        }
+      ]
+    }
+  ],
+  "version": {
+    "major": 3,
+    "minor": 0
+  }
+}
