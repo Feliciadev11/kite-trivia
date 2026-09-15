@@ -1,5 +1,5 @@
 import axios from "axios";
-import { findUnsyncedPurchases, syncCharacterPurchase } from "./purchases";
+import { findUnsyncedPurchases, syncCharacterPurchase, resolveIdentitySync } from "./purchases";
 
 jest.mock("axios");
 
@@ -60,4 +60,51 @@ test("syncCharacterPurchase gives up after retries exhausted on repeated network
     syncCharacterPurchase("cloud_kite", "kite_cloud", "txn_1", { retries: 2, delayMs: 0 })
   ).rejects.toMatchObject({ message: "Network Error" });
   expect(axios.post).toHaveBeenCalledTimes(3);
+});
+
+// resolveIdentitySync: the RevenueCat identity the SDK should be configured
+// as, given the currently-configured appUserId and the newly-requested one.
+// Bug this covers: switching Kite accounts within one app session (no
+// relaunch) used to silently no-op past the first-ever configure() call,
+// leaving RevenueCat permanently attached to whichever account booted first
+// — purchases and entitlement checks for every account after that kept
+// hitting the FIRST account's RevenueCat identity.
+
+test("not yet configured -> configure with the given user id", () => {
+  expect(resolveIdentitySync({ initialized: false, currentAppUserId: null }, "user_1")).toEqual({
+    action: "configure",
+    appUserId: "user_1",
+  });
+});
+
+test("not yet configured, no user id -> configure anonymous", () => {
+  expect(resolveIdentitySync({ initialized: false, currentAppUserId: null }, undefined)).toEqual({
+    action: "configure",
+    appUserId: null,
+  });
+});
+
+test("already configured as the same user -> no-op", () => {
+  expect(resolveIdentitySync({ initialized: true, currentAppUserId: "user_1" }, "user_1")).toEqual({
+    action: "noop",
+  });
+});
+
+test("already configured as user_1, now user_2 logs in -> logIn(user_2), not silently ignored", () => {
+  expect(resolveIdentitySync({ initialized: true, currentAppUserId: "user_1" }, "user_2")).toEqual({
+    action: "logIn",
+    appUserId: "user_2",
+  });
+});
+
+test("already configured as a real user, app session logs out -> logOut back to anonymous", () => {
+  expect(resolveIdentitySync({ initialized: true, currentAppUserId: "user_1" }, undefined)).toEqual({
+    action: "logOut",
+  });
+});
+
+test("already anonymous, still anonymous -> no-op (not a spurious logOut)", () => {
+  expect(resolveIdentitySync({ initialized: true, currentAppUserId: null }, undefined)).toEqual({
+    action: "noop",
+  });
 });

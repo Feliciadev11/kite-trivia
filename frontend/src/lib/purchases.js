@@ -54,6 +54,21 @@ const PLATFORM = Capacitor.getPlatform(); // "ios" | "android" | "web"
 
 let _purchasesModule = null;
 let _initialized = false;
+let _currentAppUserId = null; // the appUserId (or null = anonymous) RevenueCat is currently configured as
+
+/**
+ * Pure decision: given the RevenueCat SDK's current identity state and the
+ * appUserId initPurchases() is now being called with, what should happen?
+ * Split out from initPurchases() so this logic — the actual bug fix below —
+ * is unit-testable without the native SDK. See purchases.test.js.
+ */
+export function resolveIdentitySync({ initialized, currentAppUserId }, nextAppUserId) {
+  const normalized = nextAppUserId || null;
+  if (!initialized) return { action: "configure", appUserId: normalized };
+  if (normalized === currentAppUserId) return { action: "noop" };
+  if (normalized) return { action: "logIn", appUserId: normalized };
+  return { action: "logOut" };
+}
 
 async function _lazyImport() {
   if (_purchasesModule) return _purchasesModule;
@@ -72,36 +87,59 @@ export const getPlatform = () => PLATFORM;
 
 // -------------------- Init --------------------
 /**
- * Configure the SDK. Idempotent — safe to call multiple times.
+ * Configure the SDK, or re-identify it if already configured. Idempotent —
+ * safe to call on every PremiumContext boot, including when the signed-in
+ * user changes (login to a different account, or logout) within the same
+ * app session, no relaunch required.
  *
  * `appUserId` should be our backend user_id so RevenueCat webhooks include
  * it, when one is already known. Pass nothing (or a falsy value) to
- * configure RevenueCat ANONYMOUSLY instead — it mints and persists its own
- * on-device anonymous ID. Used when there's no backend session yet (see
- * bootPremium in PremiumContext.jsx). Re-identifying an already-configured
- * SDK onto a real user_id later requires Purchases.logIn(), not a second
- * call here — that aliasing step is deliberately not implemented yet.
+ * configure/identify RevenueCat ANONYMOUSLY instead — it mints and persists
+ * its own on-device anonymous ID. Used when there's no backend session yet
+ * (see bootPremium in PremiumContext.jsx).
  */
 export async function initPurchases(appUserId) {
   if (!IS_NATIVE) return { ok: false, reason: "unavailable" };
-  if (_initialized) return { ok: true };
+
+  const decision = resolveIdentitySync(
+    { initialized: _initialized, currentAppUserId: _currentAppUserId },
+    appUserId
+  );
+  if (decision.action === "noop") return { ok: true };
 
   const mod = await _lazyImport();
   if (!mod) return { ok: false, reason: "sdk_missing" };
 
-  const apiKey = PLATFORM === "ios" ? REVENUECAT_API_KEY_IOS : REVENUECAT_API_KEY_ANDROID;
-  if (!apiKey) {
-    return { ok: false, reason: "missing_api_key" };
+  if (decision.action === "configure") {
+    const apiKey = PLATFORM === "ios" ? REVENUECAT_API_KEY_IOS : REVENUECAT_API_KEY_ANDROID;
+    if (!apiKey) {
+      return { ok: false, reason: "missing_api_key" };
+    }
+    try {
+      const config = decision.appUserId ? { apiKey, appUserID: decision.appUserId } : { apiKey };
+      await mod.Purchases.configure(config);
+      _initialized = true;
+      _currentAppUserId = decision.appUserId;
+      return { ok: true };
+    } catch (e) {
+      logError("RevenueCat configure failed", e);
+      return { ok: false, reason: "configure_failed", error: String(e?.message || e) };
+    }
   }
 
   try {
-    const config = appUserId ? { apiKey, appUserID: appUserId } : { apiKey };
-    await mod.Purchases.configure(config);
-    _initialized = true;
+    if (decision.action === "logIn") {
+      await mod.Purchases.logIn({ appUserID: decision.appUserId });
+      _currentAppUserId = decision.appUserId;
+    } else {
+      // logOut
+      await mod.Purchases.logOut();
+      _currentAppUserId = null;
+    }
     return { ok: true };
   } catch (e) {
-    logError("RevenueCat configure failed", e);
-    return { ok: false, reason: "configure_failed", error: String(e?.message || e) };
+    logError(`RevenueCat ${decision.action} failed`, e);
+    return { ok: false, reason: `${decision.action}_failed`, error: String(e?.message || e) };
   }
 }
 

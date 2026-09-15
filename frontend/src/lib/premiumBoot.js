@@ -24,8 +24,10 @@ import { logError } from "./logger";
  *                    its own anonymous ID on-device (new in this phase).
  *
  * Logging in later to an existing account, or registering from an anonymous
- * session, does NOT re-identify an already-configured RevenueCat SDK -
- * that's Purchases.logIn() aliasing, deliberately not handled here yet.
+ * session, DOES re-identify an already-configured RevenueCat SDK via
+ * Purchases.logIn()/logOut() — see resolveIdentitySync() in purchases.js.
+ * initPurchases() is safe to call again on every userId change; it's a
+ * no-op only when the identity hasn't actually changed.
  */
 export async function bootPremium({
   authLoading,
